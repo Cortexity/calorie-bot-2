@@ -16,14 +16,12 @@ exports.handler = async function (context, event, callback) {
     if (mediaUrl) {
       twiml.message('🔍 Analyzing your food photo now…');
 
-      // --- download the image from Twilio (needs basic-auth) ---
       const imgResp = await axios.get(mediaUrl, {
         responseType: 'arraybuffer',
         auth: { username: ACCOUNT_SID, password: AUTH_TOKEN }
       });
       const base64 = Buffer.from(imgResp.data, 'binary').toString('base64');
 
-      // --- send to OpenAI ---
       const openai = new OpenAI({
         apiKey : OPENAI_API_KEY,
         project: 'proj_DmcJkr3mXaaqNaFIbf5s5r9V'
@@ -33,15 +31,26 @@ exports.handler = async function (context, event, callback) {
         model: 'gpt-4o',
         max_tokens: 300,
         messages: [
-          { role:'system',
-            content:'You are a nutritionist assistant. Identify food, estimate macros, respond with friendly emojis.' },
-          { role:'user',
-            content:[
-              { type:'text',
-                content:'What food is in this image? Give calories, protein, carbs, fats.' },
-              { type:'image_url',
-                image_url:{ url:`data:image/jpeg;base64,${base64}` } }
-            ] }
+          {
+            role: 'system',
+            content: 'You are a nutritionist assistant. Identify food, estimate macros, respond with friendly emojis.'
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'What food is in this image? Give calories, protein, carbs, fats.'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:image/jpeg;base64,${base64}`,
+                  detail: 'low'
+                }
+              }
+            ]
+          }
         ]
       });
 
