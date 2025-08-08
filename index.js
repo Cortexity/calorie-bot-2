@@ -1,5 +1,9 @@
 // index.js
+
 require('dotenv').config();
+console.log('🚀 DEPLOYMENT VERSION: 2.0 - CORS FIXED - ' + new Date().toISOString());
+
+
 const express = require('express');
 const axios = require('axios');
 const FormData = require('form-data');
@@ -11,21 +15,78 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// 👇 ADD THE CORS CODE HERE 👇
+// RAILWAY REQUEST INTERCEPTOR - MUST BE FIRST MIDDLEWARE
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
+  console.log(`🎯 REQUEST HIT: ${req.method} ${req.path} from ${req.ip} at ${new Date().toISOString()}`);
+  console.log(`   Headers: ${JSON.stringify(req.headers).substring(0, 200)}`);
+  next();
 });
 
-console.log('🌐 CORS middleware added');
-// 👆 ADD THE CORS CODE HERE 👆
+// CORS MIDDLEWARE
+app.use((req, res, next) => {
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(200).json({ message: 'CORS preflight successful' });
+  }
+  next();
+});
+
+console.log('✅ CORS middleware configured');
+
+// ============================================================================
+// TEST ENDPOINTS
+// ============================================================================
+
+// Root endpoint for health checks
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'OK',
+    service: 'calorie-bot-2',
+    version: '2.0',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Simple test endpoint
+app.get('/test', (req, res) => {
+  console.log('📍 GET /test endpoint hit');
+  res.json({ 
+    message: 'Server is working!',
+    origin: req.headers.origin,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// CORS test GET endpoint
+app.get('/cors-test', (req, res) => {
+  console.log('🧪 GET /cors-test endpoint hit');
+  res.json({ 
+    message: 'CORS GET test successful',
+    origin: req.headers.origin,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// CORS test POST endpoint
+app.post('/cors-test', (req, res) => {
+  console.log('🧪 POST /cors-test endpoint hit');
+  console.log('  - Body received:', req.body);
+  res.json({ 
+    message: 'CORS POST test successful',
+    origin: req.headers.origin,
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ============================================================================
+// ENVIRONMENT VARIABLES
+// ============================================================================
 
 const OA_KEY = process.env.OPENAI_API_KEY;
 const SB_URL = process.env.SUPABASE_URL;
@@ -33,15 +94,25 @@ const SB_KEY = process.env.SUPABASE_KEY;
 const ACC = process.env.ACCOUNT_SID;
 const TOK = process.env.AUTH_TOKEN;
 
+console.log('🔌 Connecting to Supabase...');
+console.log('  - URL exists:', !!SB_URL);
+console.log('  - KEY exists:', !!SB_KEY);
+
 const db = createClient(SB_URL, SB_KEY, {
   global: { headers: { Authorization: `Bearer ${SB_KEY}` } }
 });
+
+console.log('✅ Supabase client created');
 
 const bars = (used, goals) => `
 🔥 Calories: ${used.kcal}/${goals.kcal} kcal
 🥩 Proteins: ${used.prot}/${goals.prot} g
 🥔 Carbs:    ${used.carb}/${goals.carb} g
 🧈 Fats:     ${used.fat}/${goals.fat} g`;
+
+// ============================================================================
+// WHATSAPP WEBHOOK
+// ============================================================================
 
 app.post('/webhook', async (req, res) => {
   const twiml = new MessagingResponse();
@@ -180,21 +251,18 @@ app.post('/webhook', async (req, res) => {
 // COMPLETE USER SETUP ROUTE
 // ============================================================================
 
-app.post('/complete-user-setup', express.json(), async (req, res) => {
-  console.log('🔄 Complete user setup request received');
+app.post('/complete-user-setup', async (req, res) => {
+  console.log('🔄 Complete user setup - REQUEST RECEIVED');
+  console.log('  - Origin:', req.headers.origin);
+  console.log('  - Body:', JSON.stringify(req.body, null, 2));
   
   try {
     const { checkoutKey, sessionId, stripeData, userData } = req.body;
     
-    console.log('🔍 DEBUGGING SESSION ID:');
-    console.log('  - sessionId received:', sessionId);
-    console.log('  - sessionId type:', typeof sessionId);
-    console.log('  - sessionId length:', sessionId ? sessionId.length : 'null');
-
-    console.log('🔑 Checkout key:', checkoutKey);
-    console.log('🎫 Session ID:', sessionId);
-    console.log('💳 Stripe data:', stripeData);
-    console.log('👤 User data:', userData);
+    console.log('📦 Parsed request data:');
+    console.log('  - checkoutKey:', checkoutKey);
+    console.log('  - sessionId:', sessionId);
+    console.log('  - userData:', userData);
     
     if (!checkoutKey || !userData) {
       return res.status(400).json({ 
@@ -209,8 +277,6 @@ app.post('/complete-user-setup', express.json(), async (req, res) => {
     if (sessionId && sessionId !== 'unknown') {
       try {
         console.log('🔍 Fetching Stripe session details...');
-        
-        // Retrieve the checkout session
         const session = await stripe.checkout.sessions.retrieve(sessionId);
         console.log('📋 Session retrieved:', {
           id: session.id,
@@ -229,13 +295,11 @@ app.post('/complete-user-setup', express.json(), async (req, res) => {
         
       } catch (stripeError) {
         console.error('❌ Error fetching Stripe session:', stripeError);
-        // Continue with unknown values rather than failing completely
       }
     }
     
     // Prepare final user data for Supabase
     const finalUserData = {
-      // User onboarding data
       phone_number: userData.phone_number || null,
       gender: userData.gender || 'male',
       age: userData.age || 25,
@@ -246,12 +310,8 @@ app.post('/complete-user-setup', express.json(), async (req, res) => {
       prot_goal: userData.prot_goal || 150,
       carb_goal: userData.carb_goal || 200,
       fat_goal: userData.fat_goal || 67,
-      
-      // Actual Stripe data (not hardcoded)
       stripe_customer_id: actualCustomerId,
       stripe_subscription_id: actualSubscriptionId,
-      
-      // Timestamps
       created_at: new Date().toISOString()
     };
     
@@ -286,10 +346,10 @@ app.post('/complete-user-setup', express.json(), async (req, res) => {
 });
 
 // ============================================================================
-// NEW ROUTE: Trigger WhatsApp welcome message
+// TRIGGER WHATSAPP WELCOME MESSAGE
 // ============================================================================
 
-app.post('/trigger-welcome', express.json(), async (req, res) => {
+app.post('/trigger-welcome', async (req, res) => {
   console.log('📱 WhatsApp welcome trigger received');
   
   try {
@@ -299,28 +359,20 @@ app.post('/trigger-welcome', express.json(), async (req, res) => {
       return res.status(400).json({ error: 'Phone number is required' });
     }
     
-    // Format phone number for WhatsApp (ensure it starts with +)
+    // Format phone number for WhatsApp
     let formattedPhone = phone.toString().trim();
-    
-    // Remove ALL spaces and non-digit characters except +
     formattedPhone = formattedPhone.replace(/[^\d+]/g, '');
     
-    // Ensure consistent format: +countrycodenumber (no spaces anywhere)
     if (formattedPhone.startsWith('+')) {
-        // Remove any spaces that might exist and ensure clean format
         formattedPhone = '+' + formattedPhone.substring(1).replace(/\D/g, '');
     }
     
-    console.log('📱 Final formatted phone (no spaces):', formattedPhone);
+    console.log('📱 Final formatted phone:', formattedPhone);
     
-    // Get actual user data from the request (FIXED: Use the actual data!)
-    console.log('🔍 Raw userData received:', userData);
-    
-    // FIXED: Extract actual values from the userData
-    let actualCalories, actualProtein, actualFat, actualCarbs, actualWeight, fitnessGoal;
+    // Extract actual values from userData
+    let actualCalories = 2000, actualProtein = 150, actualFat = 67, actualCarbs = 200, actualWeight = 70, fitnessGoal = 'maintain_build';
     
     if (userData && userData.fullRawData) {
-        // Use fullRawData if available (most complete)
         const data = userData.fullRawData;
         actualCalories = data.calorieGoal || data.kcal_goal || 2000;
         actualProtein = data.proteinGrams || data.prot_goal || 150;
@@ -328,52 +380,17 @@ app.post('/trigger-welcome', express.json(), async (req, res) => {
         actualCarbs = data.carbGrams || data.carb_goal || 200;
         actualWeight = data.weightKg || data.weight_kg || 70;
         fitnessGoal = data.fitnessGoal || 'maintain_build';
-        
-        console.log('📊 Using fullRawData:', {
-            calories: actualCalories,
-            protein: actualProtein,
-            fat: actualFat,
-            carbs: actualCarbs,
-            weight: actualWeight,
-            goal: fitnessGoal
-        });
     } else if (userData && userData.supabaseData) {
-        // Fallback to supabaseData
         const data = userData.supabaseData;
         actualCalories = data.kcal_goal || 2000;
         actualProtein = data.prot_goal || 150;
         actualFat = data.fat_goal || 67;
         actualCarbs = data.carb_goal || 200;
         actualWeight = data.weight_kg || 70;
-        // Note: supabaseData doesn't have fitnessGoal, so we'll determine it from calories
-        if (actualCalories < 1500) {
-            fitnessGoal = 'lose_weight';
-        } else if (actualCalories > 2500) {
-            fitnessGoal = 'gain_weight';
-        } else {
-            fitnessGoal = 'maintain_build';
-        }
-        
-        console.log('📊 Using supabaseData:', {
-            calories: actualCalories,
-            protein: actualProtein,
-            fat: actualFat,
-            carbs: actualCarbs,
-            weight: actualWeight,
-            goal: fitnessGoal
-        });
-    } else {
-        // Last resort: use defaults
-        console.log('⚠️ No userData found, using defaults');
-        actualCalories = 2000;
-        actualProtein = 150;
-        actualFat = 67;
-        actualCarbs = 200;
-        actualWeight = 70;
-        fitnessGoal = 'maintain_build';
+        fitnessGoal = actualCalories < 1500 ? 'lose_weight' : actualCalories > 2500 ? 'gain_weight' : 'maintain_build';
     }
     
-    // Determine goal text based on actual fitness goal
+    // Determine goal text
     let goalText = '*Maintain weight but build muscle*';
     let motivationText = 'If you stay consistent, you will lose fat and gain muscle over time, while keeping your weight stable 💪';
     
@@ -385,23 +402,16 @@ app.post('/trigger-welcome', express.json(), async (req, res) => {
       motivationText = 'If you stay consistent, you will gain weight by building muscle over time 🏋️‍♂️🍽️';
     }
     
-    console.log('🎯 Final goal text:', goalText);
+    // Calculate TDEE
+    let actualTDEE = actualCalories;
+    if (fitnessGoal === 'lose_weight') actualTDEE = actualCalories + 300;
+    else if (fitnessGoal === 'gain_weight') actualTDEE = actualCalories - 300;
     
-    // Calculate TDEE (should match calorie goal for maintain, be higher for lose, lower for gain)
-    let actualTDEE;
-    if (fitnessGoal === 'lose_weight') {
-        actualTDEE = actualCalories + 300; // Add back the deficit
-    } else if (fitnessGoal === 'gain_weight') {
-        actualTDEE = actualCalories - 300; // Remove the surplus
-    } else {
-        actualTDEE = actualCalories; // Maintenance
-    }
-    
-    const welcomeMessage = `Welcome to *Calorai* 🔥
+    const welcomeMessage = `Welcome to *IQCalorie* 🔥
 
 🚀 You're all set and ready to go!
 
-You can start texting me now! 💪🍽️
+You can start texting me now! 💪✅
 
 *Here are your Key Numbers:*
 
@@ -425,13 +435,12 @@ I will take these numbers into account when talking to you!`;
       const twilio = require('twilio')(process.env.ACCOUNT_SID, process.env.AUTH_TOKEN);
       
       const message = await twilio.messages.create({
-        from: 'whatsapp:+14155238886', // Your Twilio WhatsApp number
+        from: 'whatsapp:+14155238886',
         to: `whatsapp:${formattedPhone}`,
         body: welcomeMessage
       });
       
       console.log('✅ WhatsApp welcome message sent:', message.sid);
-      console.log('📋 Message content preview:', welcomeMessage.substring(0, 100) + '...');
       
       res.json({
         success: true,
@@ -456,9 +465,8 @@ I will take these numbers into account when talking to you!`;
   }
 });
 
-
 // ============================================================================
-// STRIPE WEBHOOK ROUTE
+// STRIPE WEBHOOK
 // ============================================================================
 
 app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -475,13 +483,8 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
       console.log('📋 Session ID:', session.id);
       console.log('👤 Customer ID:', session.customer);
       console.log('💳 Subscription ID:', session.subscription);
-      console.log('📧 Customer Email:', session.customer_email);
-      console.log('💰 Amount Total:', session.amount_total);
-      console.log('💱 Currency:', session.currency);
       
       const successUrl = session.success_url || '';
-      console.log('🔗 Success URL:', successUrl);
-      
       const checkoutKeyMatch = successUrl.match(/checkout_key=([^&]+)/);
       const checkoutKey = checkoutKeyMatch ? checkoutKeyMatch[1] : null;
       
@@ -501,13 +504,7 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
         };
         
         console.log('🎯 STRIPE USER DATA READY FOR SUPABASE:', stripeUserData);
-        console.log('🔄 Next: Frontend needs to call /complete-user-setup with user data');
-        
-      } else {
-        console.warn('⚠️ No checkout key found in success URL');
       }
-    } else {
-      console.log('⏭️ Ignoring event type:', event.type);
     }
     
     res.status(200).json({ received: true });
@@ -518,8 +515,115 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
   }
 });
 
-console.log('🎣 Updated Stripe webhook route added at /stripe-webhook');
-console.log('🛠️ Complete user setup route added at /complete-user-setup');
+// ============================================================================
+// PROXY SETUP (BACKUP ENDPOINT)
+// ============================================================================
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Calorai bot running at http://localhost:${PORT}`));
+app.post('/proxy-setup', async (req, res) => {
+  console.log('🔄 Proxy endpoint hit');
+  
+  // Manually set CORS for this specific endpoint
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+  try {
+    const { checkoutKey, sessionId, stripeData, userData } = req.body;
+    console.log('Proxy received data:', { checkoutKey, sessionId });
+    
+    let actualCustomerId = 'unknown';
+    let actualSubscriptionId = 'unknown';
+    
+    if (sessionId && sessionId !== 'unknown') {
+      try {
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        actualCustomerId = session.customer || 'no_customer';
+        actualSubscriptionId = session.subscription || 'no_subscription';
+      } catch (stripeError) {
+        console.error('❌ Error fetching Stripe session:', stripeError);
+      }
+    }
+    
+    const finalUserData = {
+      phone_number: userData.phone_number || null,
+      gender: userData.gender || 'male',
+      age: userData.age || 25,
+      height_cm: userData.height_cm || 175,
+      weight_kg: userData.weight_kg || 70,
+      activity_level: userData.activity_level || 'active',
+      kcal_goal: userData.kcal_goal || 2000,
+      prot_goal: userData.prot_goal || 150,
+      carb_goal: userData.carb_goal || 200,
+      fat_goal: userData.fat_goal || 67,
+      stripe_customer_id: actualCustomerId,
+      stripe_subscription_id: actualSubscriptionId,
+      created_at: new Date().toISOString()
+    };
+    
+    const { data, error } = await db.from('users').insert(finalUserData).select();
+    
+    if (error) {
+      console.error('❌ Supabase insert error:', error);
+      return res.status(500).json({ 
+        error: 'Failed to create user account', 
+        details: error.message 
+      });
+    }
+    
+    console.log('✅ User successfully created in Supabase:', data[0]);
+    
+    res.json({ 
+      success: true, 
+      message: 'User account created successfully via proxy',
+      user: data[0]
+    });
+    
+  } catch (error) {
+    console.error('Proxy error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// 404 HANDLER - MUST BE LAST
+// ============================================================================
+
+app.use((req, res) => {
+  console.log('❌ 404 - Route not found:', req.method, req.path);
+  res.status(404).json({ 
+    error: 'Route not found',
+    path: req.path,
+    method: req.method,
+    message: 'The requested endpoint does not exist'
+  });
+});
+
+// ============================================================================
+// START SERVER
+// ============================================================================
+
+const PORT = parseInt(process.env.PORT) || 8080;
+
+const server = require('http').createServer(app).listen(PORT, '0.0.0.0', () => {
+  server.keepAliveTimeout = 120000; // 2 minutes
+  server.headersTimeout = 120000; // 2 minutes
+  console.log(`🚀 IQCalorie bot running on port ${PORT}`);
+  console.log(`✅ Server is ready to accept connections`);
+});
+
+server.on('error', (err) => {
+  console.error('❌ Server error:', err);
+});
+
+
+
+process.on('uncaughtException', (err) => {
+  console.error('💥 UNCAUGHT EXCEPTION:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('💥 UNHANDLED REJECTION:', err);
+  process.exit(1);
+});
