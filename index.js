@@ -465,6 +465,48 @@ I will take these numbers into account when talking to you!`;
   }
 });
 
+// CREATE CHECKOUT SESSION WITH 3-DAY TRIAL
+app.post('/create-checkout-session', async (req, res) => {
+  console.log('🛒 Creating checkout session with 3-day trial');
+  
+  // CORS headers for this endpoint
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+  try {
+    const { priceId, checkoutKey } = req.body;
+    
+    console.log('Creating session for price:', priceId);
+    console.log('Checkout key:', checkoutKey);
+    
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      subscription_data: {
+        trial_period_days: 3  // YOUR 3-DAY FREE TRIAL
+      },
+      success_url: `https://www.iqcalorie.com/confirmation?session_id={CHECKOUT_SESSION_ID}&checkout_key=${checkoutKey}`,
+      cancel_url: 'https://www.iqcalorie.com/choose-your-plan',
+    });
+    
+    console.log('✅ Session created:', session.id);
+    res.json({ sessionId: session.id });
+    
+  } catch (error) {
+    console.error('❌ Error creating session:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // ============================================================================
 // STRIPE WEBHOOK
 // ============================================================================

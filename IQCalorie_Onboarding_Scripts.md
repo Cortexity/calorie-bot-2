@@ -1566,7 +1566,7 @@ document.addEventListener("DOMContentLoaded", function() {
 ```html
 <!-- Insert footer script for Preferred Diet -->
 ```
-<script>
+<<script>
 // Diet Preference Selection UI Code
 // Desktop Version
 document.addEventListener("DOMContentLoaded", function () {
@@ -1691,8 +1691,15 @@ document.addEventListener("DOMContentLoaded", function () {
             console.log('Diet preference stored: flexitarian');
           }
           
-          // Redirect immediately for non-"Other" options
-          window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+          // Check fitness goal and redirect accordingly
+const fitnessGoal = localStorage.getItem('fitnessGoal');
+if (fitnessGoal === 'maintain_build') {
+  // Skip target weight and weekly results for maintain weight users
+  window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
+} else {
+  // Go to target weight for lose/gain weight users
+  window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+}
         }
       });
     }
@@ -1733,16 +1740,22 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
   
-  // Handle next button click
-  if (nextBtn) {
-    nextBtn.addEventListener("click", function(e) {
-      e.preventDefault();
-      // Check if this button is active (opaque)
-      if (this.style.opacity === "1") {
-        window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+
+	// Handle next button click
+      if (nextBtn) {
+        nextBtn.addEventListener("click", function(e) {
+          e.preventDefault();
+          // Check if this button is active (opaque)
+          if (this.style.opacity === "1") {
+            const fitnessGoal = localStorage.getItem('fitnessGoal');
+            if (fitnessGoal === 'maintain_build') {
+              window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
+            } else {
+              window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+            }
+          }
+        });
       }
-    });
-  }
 });
 </script>
 
@@ -1854,8 +1867,15 @@ document.addEventListener("DOMContentLoaded", function () {
             console.log('Diet preference stored: flexitarian');
           }
           
-          // Redirect immediately for non-"Other" options
-          window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+          // Check fitness goal and redirect accordingly
+const fitnessGoal = localStorage.getItem('fitnessGoal');
+if (fitnessGoal === 'maintain_build') {
+  // Skip target weight and weekly results for maintain weight users
+  window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
+} else {
+  // Go to target weight for lose/gain weight users
+  window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+}
         }
       });
     }
@@ -1897,15 +1917,20 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   
   // Handle next button click
-  if (nextBtn) {
-    nextBtn.addEventListener("click", function(e) {
-      e.preventDefault();
-      // Check if this button is active (opaque)
-      if (this.style.opacity === "1") {
-        window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+      if (nextBtn) {
+        nextBtn.addEventListener("click", function(e) {
+          e.preventDefault();
+          // Check if this button is active (opaque)
+          if (this.style.opacity === "1") {
+            const fitnessGoal = localStorage.getItem('fitnessGoal');
+            if (fitnessGoal === 'maintain_build') {
+              window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
+            } else {
+              window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+            }
+          }
+        });
       }
-    });
-  }
 });
 </script>
 ---
@@ -2186,6 +2211,17 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 })();
 </script>
+
+<!-- Add this script in the CSS section of the Target Weight page, not footer -->
+<style>
+/* Hide all error messages by default to prevent flash */
+#metric-target-weight-loss-error,
+#metric-target-weight-gain-error,
+#imperial-target-weight-loss-error,
+#imperial-target-weight-gain-error {
+    display: none !important;
+}
+</style>
 
 
 
@@ -2812,10 +2848,10 @@ window.manualTest = manualTest;
     
     // Stripe Configuration
     const STRIPE_CONFIG = {
-        publishableKey: "pk_test_51RkLeiEUy9uD09G3dISb5ot33FM1TKvryqrJQfpOSAOEWARm0Obo1o8Wxf8kOr6p4cyedQ5yrnFT4N0crXzzjg49007l8QAImk",
+        publishableKey: "pk_live_51RkLeiEUy9uD09G3oBQUBejzZW6dKRC0UocZnyEuv0KBWZyIu8sPY1R12Hc4oLBcq0aluzQSyuLQIp10vzRxUYXU00JOpHsi97",
         priceIds: {
-            yearly: "price_1Rrgl6EUy9uD09G3wpGYYAVw",
-            monthly: "price_1RrgieEUy9uD09G3UvPe5oco"
+            yearly: "price_1Ru9e5EUy9uD09G3KqXCTFpB",
+            monthly: "price_1Ru9ezEUy9uD09G3ik4jyASa"
         }
     };
     
@@ -2872,7 +2908,7 @@ window.manualTest = manualTest;
     }
     
 // SIMPLE FIX - Store metadata separately and include customer email
-function redirectToCheckout(planType) {
+async function redirectToCheckout(planType) {
     console.log(`💳 Starting checkout redirect for plan: ${planType}`);
     
     // Validate Stripe initialization
@@ -2892,63 +2928,59 @@ function redirectToCheckout(planType) {
     
     console.log(`🎯 Using price ID: ${priceId} for plan: ${planType}`);
     
-    // Get user data from your onboarding system
+    // Get user data
     const userData = getCompiledUserData();
     console.log("👤 User data retrieved:", userData);
     
-    // Store user data with plan type for webhook retrieval
+    // Create checkout key
     const checkoutData = {
         planType: planType,
         userData: userData,
         timestamp: new Date().getTime()
     };
     
-    // Store in localStorage with a unique key based on timestamp
     const checkoutKey = `checkout_${checkoutData.timestamp}`;
     localStorage.setItem(checkoutKey, JSON.stringify(checkoutData));
     localStorage.setItem('latest_checkout_key', checkoutKey);
     
     console.log("💾 Stored checkout data for webhook retrieval:", checkoutKey);
     
-    // Prepare basic checkout options (no metadata - to avoid the error)
-    const checkoutOptions = {
-        lineItems: [{
-            price: priceId,
-            quantity: 1,
-        }],
-        mode: 'subscription',
-        successUrl: 'https://www.iqcalorie.com/confirmation?session_id={CHECKOUT_SESSION_ID}&checkout_key=' + checkoutKey,
-        cancelUrl: window.location.href
-    };
-    
-    // Add customer email if available (this IS supported)
-    if (userData && userData.fullRawData && userData.fullRawData.email) {
-        checkoutOptions.customerEmail = userData.fullRawData.email;
-        console.log("📧 Added customer email:", userData.fullRawData.email);
-    }
-    
-    console.log("⚙️ Final checkout options (without metadata):", checkoutOptions);
-    
-    // Redirect to Stripe Checkout
-    console.log("🚀 Redirecting to Stripe Checkout...");
-    
-    stripe.redirectToCheckout(checkoutOptions)
-    .then(function(result) {
-        console.log("✅ Stripe redirect successful");
-    })
-    .catch(function(error) {
-        console.error("❌ Stripe redirect failed:", error);
+    try {
+        // Call YOUR BACKEND to create session with trial
+        console.log("📞 Calling backend to create checkout session...");
         
-        let errorMessage = "There was an issue processing your request. ";
-        if (error.message) {
-            console.error("📝 Stripe error message:", error.message);
-            errorMessage += "Please try again or contact support.";
-        } else {
-            errorMessage += "Please refresh the page and try again.";
+        const response = await fetch('https://bass-ethical-piranha.ngrok-free.app/create-checkout-session', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                priceId: priceId,
+                checkoutKey: checkoutKey
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to create checkout session');
         }
         
-        alert(errorMessage);
-    });
+        const data = await response.json();
+        console.log("✅ Got session ID from backend:", data.sessionId);
+        
+        // Redirect to Stripe Checkout with the session ID
+        const result = await stripe.redirectToCheckout({ 
+            sessionId: data.sessionId 
+        });
+        
+        if (result.error) {
+            console.error("❌ Redirect error:", result.error);
+            alert(result.error.message);
+        }
+        
+    } catch (error) {
+        console.error("❌ Error creating checkout session:", error);
+        alert("Error processing payment. Please try again.");
+    }
 }
     
     // Setup button click handlers
@@ -3370,17 +3402,17 @@ function redirectToCheckout(planType) {
             if (welcomeResult) {
                 console.log("🎉 USER SETUP AND WHATSAPP WELCOME COMPLETE!");
                 
-                // Show success message to user
-                const successMessage = document.createElement('div');
-                successMessage.innerHTML = `
-                    <div style="background: #e8f5e8; border: 1px solid #4caf50; padding: 15px; margin: 20px; border-radius: 8px;">
-                        <h3 style="color: #2e7d32; margin: 0 0 10px 0;">✅ Setup Complete!</h3>
-                        <p style="margin: 0; color: #333;">
-                            Check your WhatsApp for a welcome message from Calorai at <strong>${phoneNumber}</strong>
-                        </p>
-                    </div>
-                `;
-                document.body.appendChild(successMessage);
+                               // // Show success message to user - DISABLED
+                // const successMessage = document.createElement('div');
+                // successMessage.innerHTML = `
+                //     <div style="background: #e8f5e8; border: 1px solid #4caf50; padding: 15px; margin: 20px; border-radius: 8px;">
+                //         <h3 style="color: #2e7d32; margin: 0 0 10px 0;">✅ Setup Complete!</h3>
+                //         <p style="margin: 0; color: #333;">
+                //             Check your WhatsApp for a welcome message from IQCalorie at <strong>${phoneNumber}</strong>
+                //         </p>
+                //     </div>
+                // `;
+                // document.body.appendChild(successMessage);
             } else {
                 console.log("⚠️ User account created but WhatsApp welcome failed");
             }
