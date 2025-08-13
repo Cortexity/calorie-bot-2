@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "twilio-run",
+    "start": "node index.js",
+    "dev": "nodemon index.js",
     "deploy": "twilio-run deploy"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "twilio": "^5.6.1"
   },
   "devDependencies": {
+    "nodemon": "^3.1.10",
     "twilio-run": "^4.0.3"
   },
   "engines": {

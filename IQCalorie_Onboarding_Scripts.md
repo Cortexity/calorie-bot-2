@@ -150,7 +150,18 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
                 
                 startTrialBtn.addEventListener('click', function(e) {
                     console.log("🚀 START FREE TRIAL CLICKED!");
-                    
+
+                    // CAPTURE EMAIL (moved outside phone logic)
+                    const emailInput = document.querySelector('input[type="email"]');
+                    const emailValue = emailInput ? emailInput.value.trim() : '';
+
+                    if (emailValue) {
+                        localStorage.setItem('userEmail', emailValue);
+                        console.log("📧 Email stored:", emailValue);
+                    } else {
+                        console.log("📧 No email found in form");
+                    }  
+
                     if (phoneAlreadyCaptured) {
                         console.log("📱 Phone already captured, skipping...");
                         return;
@@ -2449,6 +2460,9 @@ if (fitnessGoal === 'maintain_build') {
 <!-- COMPLETE CHOOSE YOUR PLAN FOOTER SCRIPT -->
 <!-- PART 1: Your existing code (KEEP AS-IS) -->
 
+<!-- COMPLETE CHOOSE YOUR PLAN FOOTER SCRIPT -->
+<!-- PART 1: Your existing code (KEEP AS-IS) -->
+
 <script>
 // Choose Your Plan Page - Smooth Transition Logic
 
@@ -2911,6 +2925,13 @@ window.manualTest = manualTest;
 async function redirectToCheckout(planType) {
     console.log(`💳 Starting checkout redirect for plan: ${planType}`);
     
+    // Get phone and email from localStorage (for pre-filling only)
+    const phoneNumber = localStorage.getItem('userPhone');
+    const email = localStorage.getItem('userEmail');
+    
+    console.log("📱 Phone from localStorage:", phoneNumber || "Will collect in Stripe");
+    console.log("📧 Email from localStorage:", email || "Will collect in Stripe");
+    
     // Validate Stripe initialization
     if (!stripe) {
         console.error("❌ Stripe not initialized");
@@ -2930,7 +2951,7 @@ async function redirectToCheckout(planType) {
     
     // Get user data
     const userData = getCompiledUserData();
-    console.log("👤 User data retrieved:", userData);
+    console.log("👤 User data retrieved:", userData ? "Found" : "Not found (will use defaults)");
     
     // Create checkout key
     const checkoutData = {
@@ -2946,7 +2967,6 @@ async function redirectToCheckout(planType) {
     console.log("💾 Stored checkout data for webhook retrieval:", checkoutKey);
     
     try {
-        // Call YOUR BACKEND to create session with trial
         console.log("📞 Calling backend to create checkout session...");
         
         const response = await fetch('https://bass-ethical-piranha.ngrok-free.app/create-checkout-session', {
@@ -2956,7 +2976,9 @@ async function redirectToCheckout(planType) {
             },
             body: JSON.stringify({
                 priceId: priceId,
-                checkoutKey: checkoutKey
+                checkoutKey: checkoutKey,
+                phoneNumber: phoneNumber,  // For pre-filling
+                email: email               // For pre-filling
             })
         });
         
@@ -2967,7 +2989,7 @@ async function redirectToCheckout(planType) {
         const data = await response.json();
         console.log("✅ Got session ID from backend:", data.sessionId);
         
-        // Redirect to Stripe Checkout with the session ID
+        // Redirect to Stripe Checkout
         const result = await stripe.redirectToCheckout({ 
             sessionId: data.sessionId 
         });
@@ -3190,245 +3212,372 @@ async function redirectToCheckout(planType) {
 (function() {
     "use strict";
     
-    console.log("🎯 CONFIRMATION PAGE - Auto User Setup Starting");
-    
-    // Get checkout key and session_id from URL
-    function getURLParams() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const checkoutKey = urlParams.get('checkout_key');
-        const sessionId = urlParams.get('session_id');
-        
-        console.log("🔑 URL Parameters:", { checkoutKey, sessionId });
-        return { checkoutKey, sessionId };
-    }
-    
-    // Get compiled user data from localStorage
-    function getStoredUserData() {
-        try {
-            const compiledDataStr = localStorage.getItem('compiledUserData');
-            if (!compiledDataStr) {
-                console.warn("⚠️ No compiled user data found");
-                return null;
+         console.log("🎯 CONFIRMATION PAGE - Auto User Setup Starting");
+
+        // Get checkout key and session_id from URL - ENHANCED DEBUGGING
+        function getURLParams() {
+            console.log("🔍 DEBUGGING URL PARAMETERS");
+            console.log("  - Full URL:", window.location.href);
+            console.log("  - Search string:", window.location.search);
+            console.log("  - Hash:", window.location.hash);
+
+            // Try multiple methods to get parameters
+            const urlParams = new URLSearchParams(window.location.search);
+
+            // Method 1: Standard approach
+            let checkoutKey = urlParams.get('checkout_key');
+            let sessionId = urlParams.get('session_id');
+
+            console.log("📋 Method 1 (standard) results:");
+            console.log("  - checkout_key:", checkoutKey);
+            console.log("  - session_id:", sessionId);
+
+            // Method 2: Check if parameters exist with different names
+            console.log("📋 All URL parameters found:");
+            for (let [key, value] of urlParams) {
+                console.log(`  - ${key}: ${value}`);
             }
-            
-            const compiledData = JSON.parse(compiledDataStr);
-            console.log("👤 Retrieved user data:", compiledData);
-            return compiledData;
-        } catch (error) {
-            console.error("❌ Error retrieving user data:", error);
-            return null;
-        }
-    }
-    
-    // FIXED: Get phone number from localStorage (captured on landing page)
-    function getPhoneNumber() {
-        console.log("📱 GETTING PHONE NUMBER FROM LOCALSTORAGE...");
-        
-        // Get phone from localStorage (set by landing page script)
-        let phone = localStorage.getItem('userPhone');
-        
-        console.log("📱 Raw phone from localStorage:", phone);
-        
-        if (!phone) {
-            console.warn("⚠️ No phone number found in localStorage");
-            
-            // Debug: Show all localStorage keys
-            console.log("🔍 All localStorage keys:");
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                const value = localStorage.getItem(key);
-                console.log(`  ${key}: ${value}`);
+
+            // Method 3: Manual parsing as fallback
+            if (!checkoutKey || !sessionId) {
+                console.log("🔄 Trying manual parsing...");
+                const searchString = window.location.search.substring(1);
+                const params = searchString.split('&');
+
+                params.forEach(param => {
+                    const [key, value] = param.split('=');
+                    console.log(`  - Found: ${key} = ${decodeURIComponent(value || '')}`);
+
+                    if (key === 'checkout_key') {
+                        checkoutKey = decodeURIComponent(value || '');
+                    }
+                    if (key === 'session_id') {
+                        sessionId = decodeURIComponent(value || '');
+                    }
+                });
             }
-            
-            return null;
+
+            // Method 4: Check if Stripe replaced session_id
+            if (sessionId && sessionId === '{CHECKOUT_SESSION_ID}') {
+                console.log("⚠️ Stripe placeholder not replaced!");
+                sessionId = null;
+            }
+
+            console.log("🎯 FINAL RESULTS:");
+            console.log("  - checkoutKey:", checkoutKey || "NOT FOUND");
+            console.log("  - sessionId:", sessionId || "NOT FOUND");
+
+            return { checkoutKey, sessionId };
         }
-        
-        // Clean the phone number (remove any extra spaces, but keep the + and digits)
-        phone = phone.replace(/\s+/g, '');
-        
-        // Validate that it looks like a phone number
-        if (!phone.startsWith('+') || phone.length < 10) {
-            console.warn("⚠️ Phone number format looks incorrect:", phone);
-            return null;
-        }
-        
-        console.log("📱 Final cleaned phone number:", phone);
-        return phone;
-    }
-    
-    // Create user account via backend
-    async function createUserAccount(checkoutKey, sessionId, userData, phoneNumber) {
-        console.log("🚀 Creating user account...");
-        
-        try {
-            const requestData = {
-                checkoutKey: checkoutKey,
-                sessionId: sessionId,
-                stripeData: {
-                    session_id: sessionId,
-                    customer_id: "fetch_from_session",
-                    subscription_id: "fetch_from_session"
-                },
-                userData: {
-                    // FIXED: Include phone number in user data
-                    phone_number: phoneNumber,
-                    gender: userData.supabaseData.gender || "male",
-                    age: userData.supabaseData.age || 25,
-                    height_cm: userData.supabaseData.height_cm || 175,
-                    weight_kg: userData.supabaseData.weight_kg || 70,
-                    activity_level: userData.supabaseData.activity_level || "active",
-                    kcal_goal: userData.supabaseData.kcal_goal || 2000,
-                    prot_goal: userData.supabaseData.prot_goal || 150,
-                    carb_goal: userData.supabaseData.carb_goal || 200,
-                    fat_goal: userData.supabaseData.fat_goal || 67
+
+        // Get compiled user data from localStorage
+        function getStoredUserData() {
+            try {
+                const compiledDataStr = localStorage.getItem('compiledUserData');
+                if (!compiledDataStr) {
+                    console.warn("⚠️ No compiled user data found");
+                    return null;
                 }
-            };
-          
-            console.log("🔍 COMPLETE REQUEST DATA BEING SENT:");
-            console.log("  - phoneNumber variable:", phoneNumber);
-            console.log("  - userData.phone_number:", requestData.userData.phone_number);
-            console.log("  - Complete requestData:", requestData);
-            
-            console.log("📤 Sending request to backend:", requestData);
-            
-            // Use your backend URL
-            const response = await fetch('https://bass-ethical-piranha.ngrok-free.app/complete-user-setup', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestData)
-            });
-            
-            const result = await response.json();
-            
-            if (response.ok) {
-                console.log("✅ User account created successfully:", result);
-                
-                // Clear localStorage after successful creation
-                const keysToRemove = [
-                    'compiledUserData', 'supabaseReadyData', 'userPhone',
-                    'gender', 'age', 'height', 'weight', 'activityLevel', 
-                    'fitnessGoal', 'preferredSystem', 'dietPreference'
-                ];
-                
-                keysToRemove.forEach(key => localStorage.removeItem(key));
-                console.log("🗑️ Cleared user data from localStorage");
-                
-                return result;
-            } else {
-                console.error("❌ Failed to create user account:", result);
+
+                const compiledData = JSON.parse(compiledDataStr);
+                console.log("👤 Retrieved user data:", compiledData);
+                return compiledData;
+            } catch (error) {
+                console.error("❌ Error retrieving user data:", error);
                 return null;
             }
-            
-        } catch (error) {
-            console.error("❌ Error creating user account:", error);
-            return null;
         }
-    }
-    
-    // Trigger WhatsApp welcome message
-    async function triggerWhatsAppWelcome(phoneNumber, userData) {
-        console.log("📱 Triggering WhatsApp welcome message for:", phoneNumber);
-        
-        try {
-            const welcomeData = {
-                phone: phoneNumber,
-                userData: userData
-            };
-            
-            console.log("📤 Sending welcome trigger with data:", welcomeData);
-            
-            const response = await fetch('https://bass-ethical-piranha.ngrok-free.app/trigger-welcome', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(welcomeData)
-            });
-            
-            const result = await response.json();
-            
-            if (response.ok) {
-                console.log("✅ WhatsApp welcome message triggered successfully:", result);
-                return true;
-            } else {
-                console.error("❌ Failed to trigger WhatsApp welcome:", result);
+
+        // Get phone number from localStorage (captured on landing page)
+        function getPhoneNumber() {
+            console.log("📱 GETTING PHONE NUMBER FROM LOCALSTORAGE...");
+
+            // Get phone from localStorage (set by landing page script)
+            let phone = localStorage.getItem('userPhone');
+
+            console.log("📱 Raw phone from localStorage:", phone);
+
+            if (!phone) {
+                console.warn("⚠️ No phone number found in localStorage");
+
+                // Debug: Show all localStorage keys
+                console.log("🔍 All localStorage keys:");
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    const value = localStorage.getItem(key);
+                    console.log(`  ${key}: ${value}`);
+                }
+
+                return null;
+            }
+
+            // Clean the phone number (remove any extra spaces, but keep the + and digits)
+            phone = phone.replace(/\s+/g, '');
+
+            // Validate that it looks like a phone number
+            if (!phone.startsWith('+') || phone.length < 10) {
+                console.warn("⚠️ Phone number format looks incorrect:", phone);
+                return null;
+            }
+
+            console.log("📱 Final cleaned phone number:", phone);
+            return phone;
+        }
+
+        // Create user account via backend
+        async function createUserAccount(checkoutKey, sessionId, userData, phoneNumber) {
+            console.log("🚀 Creating user account...");
+            console.log("📊 DEBUG - Function inputs:");
+            console.log("  - checkoutKey:", checkoutKey);
+            console.log("  - sessionId:", sessionId);
+            console.log("  - phoneNumber:", phoneNumber);
+            console.log("  - userData exists?", !!userData);
+
+            // Check if userData.supabaseData exists
+            if (!userData) {
+                console.error("❌ userData is null/undefined!");
+                userData = {};
+            }
+
+            if (!userData.supabaseData) {
+                console.warn("⚠️ userData.supabaseData is missing - using defaults");
+                userData.supabaseData = {};
+            }
+
+            try {
+                const requestData = {
+                    checkoutKey: checkoutKey,
+                    sessionId: sessionId,
+                    stripeData: {
+                        session_id: sessionId,
+                        customer_id: "fetch_from_session",
+                        subscription_id: "fetch_from_session"
+                    },
+                    userData: {
+                        // Allow phone to be null
+                        phone_number: phoneNumber || null,
+                        gender: userData.supabaseData.gender || "male",
+                        age: userData.supabaseData.age || 25,
+                        height_cm: userData.supabaseData.height_cm || 175,
+                        weight_kg: userData.supabaseData.weight_kg || 70,
+                        activity_level: userData.supabaseData.activity_level || "active",
+                        kcal_goal: userData.supabaseData.kcal_goal || 2000,
+                        prot_goal: userData.supabaseData.prot_goal || 150,
+                        carb_goal: userData.supabaseData.carb_goal || 200,
+                        fat_goal: userData.supabaseData.fat_goal || 67
+                    }
+                };
+
+                console.log("🔍 COMPLETE REQUEST DATA BEING SENT:");
+                console.log("  - phoneNumber variable:", phoneNumber);
+                console.log("  - userData.phone_number:", requestData.userData.phone_number);
+                console.log("  - Complete requestData:", JSON.stringify(requestData, null, 2));
+
+                const backendUrl = 'https://bass-ethical-piranha.ngrok-free.app/complete-user-setup';
+                console.log("📤 Sending POST request to:", backendUrl);
+
+                // Make the actual request
+                const response = await fetch(backendUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                console.log("📨 Response received:");
+                console.log("  - Status:", response.status);
+                console.log("  - StatusText:", response.statusText);
+                console.log("  - OK?", response.ok);
+
+                const result = await response.json();
+                console.log("📦 Response JSON:", result);
+
+                if (response.ok) {
+                    console.log("✅ User account created successfully:", result);
+
+                    // Clear localStorage after successful creation
+                    const keysToRemove = [
+                        'compiledUserData', 'supabaseReadyData', 'userPhone',
+                        'gender', 'age', 'height', 'weight', 'activityLevel', 
+                        'fitnessGoal', 'preferredSystem', 'dietPreference'
+                    ];
+
+                    keysToRemove.forEach(key => localStorage.removeItem(key));
+                    console.log("🗑️ Cleared user data from localStorage");
+
+                    return result;
+                } else {
+                    console.error("❌ Failed to create user account:", result);
+                    return null;
+                }
+
+            } catch (error) {
+                console.error("❌ Error in createUserAccount:");
+                console.error("  - Error name:", error.name);
+                console.error("  - Error message:", error.message);
+                console.error("  - Full error:", error);
+                return null;
+            }
+        }
+
+        // Trigger WhatsApp welcome message
+        async function triggerWhatsAppWelcome(phoneNumber, userData) {
+            console.log("📱 Triggering WhatsApp welcome message for:", phoneNumber);
+
+            try {
+                const welcomeData = {
+                    phone: phoneNumber,
+                    userData: userData
+                };
+
+                console.log("📤 Sending welcome trigger with data:", welcomeData);
+
+                const response = await fetch('https://bass-ethical-piranha.ngrok-free.app/trigger-welcome', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(welcomeData)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    console.log("✅ WhatsApp welcome message triggered successfully:", result);
+                    return true;
+                } else {
+                    console.error("❌ Failed to trigger WhatsApp welcome:", result);
+                    return false;
+                }
+
+            } catch (error) {
+                console.error("❌ Error triggering WhatsApp welcome:", error);
                 return false;
             }
-            
-        } catch (error) {
-            console.error("❌ Error triggering WhatsApp welcome:", error);
-            return false;
         }
-    }
-    
-    // Main execution
-    async function initializeUserSetup() {
-        console.log("🔄 Starting automatic user setup...");
-        
-        // Get URL parameters
-        const { checkoutKey, sessionId } = getURLParams();
-        if (!checkoutKey || !sessionId) {
-            console.warn("⚠️ Missing checkout key or session ID - skipping user setup");
-            return;
-        }
-        
-        // Get user data from localStorage
-        const userData = getStoredUserData();
-        if (!userData || !userData.supabaseData) {
-            console.warn("⚠️ No user data found - skipping user setup");
-            return;
-        }
-        
-        // FIXED: Get phone number from localStorage
-        const phoneNumber = getPhoneNumber();
-        if (!phoneNumber) {
-            console.error("❌ No phone number found - cannot proceed with user setup");
-            return;
-        }
-        
-        // Wait a moment for webhook to process
-        console.log("⏱️ Waiting 3 seconds for webhook to process...");
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        // Create user account
-        const userResult = await createUserAccount(checkoutKey, sessionId, userData, phoneNumber);
-        
-        if (userResult && phoneNumber) {
-            // Trigger WhatsApp welcome message
-            const welcomeResult = await triggerWhatsAppWelcome(phoneNumber, userData);
-            
-            if (welcomeResult) {
-                console.log("🎉 USER SETUP AND WHATSAPP WELCOME COMPLETE!");
-                
-                               // // Show success message to user - DISABLED
-                // const successMessage = document.createElement('div');
-                // successMessage.innerHTML = `
-                //     <div style="background: #e8f5e8; border: 1px solid #4caf50; padding: 15px; margin: 20px; border-radius: 8px;">
-                //         <h3 style="color: #2e7d32; margin: 0 0 10px 0;">✅ Setup Complete!</h3>
-                //         <p style="margin: 0; color: #333;">
-                //             Check your WhatsApp for a welcome message from IQCalorie at <strong>${phoneNumber}</strong>
-                //         </p>
-                //     </div>
-                // `;
-                // document.body.appendChild(successMessage);
-            } else {
-                console.log("⚠️ User account created but WhatsApp welcome failed");
+
+        // Main execution
+        async function initializeUserSetup() {
+            console.log("🔄 Starting automatic user setup...");
+
+            // Get URL parameters
+            let { checkoutKey, sessionId } = getURLParams();
+
+            // TEST MODE: If no parameters found, try test values
+            if (!checkoutKey && !sessionId) {
+                console.log("⚠️ No URL parameters found - checking for test mode");
+
+                // Check if we're in test mode (you can trigger this manually)
+                const testMode = localStorage.getItem('testMode') === 'true';
+
+                if (testMode) {
+                    console.log("🧪 TEST MODE ACTIVATED - Using test values");
+                    checkoutKey = 'checkout_test_' + Date.now();
+                    sessionId = 'cs_test_' + Date.now();
+
+                    // Also test with actual test session if you have one
+                    // sessionId = 'cs_test_a1XYZ...'; // Replace with actual test session
+                }
             }
-        } else {
-            console.log("❌ User setup failed - please contact support");
+
+            if (!checkoutKey || !sessionId) {
+                console.warn("⚠️ Missing checkout key or session ID");
+                console.log("📍 Current location:", window.location.href);
+                console.log("💡 Expected format: ?session_id=cs_xxx&checkout_key=checkout_xxx");
+
+                // Don't return - continue to see what else works
+                // return;
+            }
+
+            // Get user data from localStorage
+            const userData = getStoredUserData();
+            if (!userData || !userData.supabaseData) {
+                console.warn("⚠️ No user data found - will use defaults");
+                // Don't return - continue with defaults
+            }
+
+            // Get phone number from localStorage (may be null for Test 2)
+            const phoneNumber = getPhoneNumber();
+            if (!phoneNumber) {
+                console.warn("⚠️ No phone number in localStorage - will rely on Stripe");
+                // DON'T RETURN - continue with null phone
+            }
+
+            // Wait a moment for webhook to process
+            console.log("⏱️ Waiting 3 seconds for webhook to process...");
+            await new Promise(resolve => setTimeout(resolve, 3000));
+
+            // Create user account (backend will handle missing phone)
+            const userResult = await createUserAccount(checkoutKey, sessionId, userData, phoneNumber);
+
+            if (userResult && userResult.user) {
+                // Use the phone from the database (Stripe's phone), not localStorage
+                const actualPhoneNumber = userResult.user.phone_number;
+                console.log("📱 Using phone from database (not localStorage):", actualPhoneNumber);
+
+                // Trigger WhatsApp welcome message with correct phone
+                if (actualPhoneNumber && !actualPhoneNumber.startsWith('+1000')) {
+                    const welcomeResult = await triggerWhatsAppWelcome(actualPhoneNumber, userData);
+
+                    if (welcomeResult) {
+                        console.log("🎉 USER SETUP AND WHATSAPP WELCOME COMPLETE!");
+                    } else {
+                        console.log("⚠️ User account created but WhatsApp welcome failed");
+                    }
+                } else {
+                    console.log("⚠️ User created but no valid phone for WhatsApp");
+                }
+            } else {
+                console.log("❌ User setup failed - please contact support");
+            }
         }
-    }
-    
-    // Start when page loads
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeUserSetup);
-    } else {
-        initializeUserSetup();
-    }
-    
-    console.log("🔧 Auto user setup script loaded");
+
+        // Add test functions for manual debugging
+        window.debugConfirmation = {
+            checkURL: function() {
+                console.log("🔍 URL Debug:");
+                console.log("  Full URL:", window.location.href);
+                console.log("  Search:", window.location.search);
+                console.log("  Params:", new URLSearchParams(window.location.search).toString());
+                return getURLParams();
+            },
+
+            testWithFakeParams: function() {
+                console.log("🧪 Testing with fake parameters");
+                // Temporarily modify the URL
+                const fakeURL = window.location.origin + window.location.pathname + 
+                               "?session_id=cs_test_123&checkout_key=checkout_test_456";
+                console.log("  Fake URL:", fakeURL);
+
+                // Store test mode flag
+                localStorage.setItem('testMode', 'true');
+
+                // Reload with fake params
+                if (confirm("Reload page with test parameters?")) {
+                    window.location.href = fakeURL;
+                }
+            },
+
+            runManually: async function() {
+                console.log("🚀 Running user setup manually");
+                await initializeUserSetup();
+            }
+        };
+
+        console.log("🧪 Debug functions available:");
+        console.log("  window.debugConfirmation.checkURL()");
+        console.log("  window.debugConfirmation.testWithFakeParams()");
+        console.log("  window.debugConfirmation.runManually()");
+
+        // Start when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeUserSetup);
+        } else {
+            initializeUserSetup();
+        }
+
+        console.log("🔧 Auto user setup script loaded");
     
 })();
 </script>

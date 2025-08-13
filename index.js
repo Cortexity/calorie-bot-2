@@ -143,7 +143,7 @@ app.post('/webhook', async (req, res) => {
 
     const msgs = [{
       role: 'system',
-      content: `You are *Calorai*, a WhatsApp nutrition coach. Always respond in English. Use the following standardized response everytime food is detected:
+      content: `You are *IQCalorie*, a WhatsApp nutrition coach. Always respond in English. Use the following standardized response everytime food is detected:
 
 ✅ *Meal logged successfully!*
 
@@ -248,77 +248,87 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ============================================================================
-// COMPLETE USER SETUP ROUTE
+// TEST VERSION OF COMPLETE USER SETUP (for Postman testing)
 // ============================================================================
 
-app.post('/complete-user-setup', async (req, res) => {
-  console.log('🔄 Complete user setup - REQUEST RECEIVED');
-  console.log('  - Origin:', req.headers.origin);
-  console.log('  - Body:', JSON.stringify(req.body, null, 2));
+app.post('/complete-user-setup-test', async (req, res) => {
+  console.log('🧪 TEST VERSION - Complete user setup');
   
   try {
-    const { checkoutKey, sessionId, stripeData, userData } = req.body;
+    const { checkoutKey, sessionId, userData, testMode } = req.body;
     
-    console.log('📦 Parsed request data:');
+    console.log('📦 Test mode received data:');
     console.log('  - checkoutKey:', checkoutKey);
     console.log('  - sessionId:', sessionId);
-    console.log('  - userData:', userData);
+    console.log('  - testMode:', testMode);
     
-    if (!checkoutKey || !userData) {
-      return res.status(400).json({ 
-        error: 'Missing required data: checkoutKey and userData are required' 
-      });
-    }
+    let finalPhoneNumber = userData?.phone_number || null;
+    let finalEmail = userData?.email || null;
+    let stripeCustomerId = 'test_customer_' + Date.now();
+    let stripeSubscriptionId = 'test_sub_' + Date.now();
     
-    let actualCustomerId = 'unknown';
-    let actualSubscriptionId = 'unknown';
-    
-    // If we have a session ID, fetch actual Stripe data
-    if (sessionId && sessionId !== 'unknown') {
+    // If testMode is true, skip Stripe and use provided data
+    if (testMode) {
+      console.log('🧪 TEST MODE: Skipping Stripe API calls');
+      
+      // Simulate the "no phone" scenario if phone_number is not provided
+      if (!finalPhoneNumber) {
+        console.log('⚠️ TEST: Simulating no phone scenario');
+        finalPhoneNumber = `+1000${Date.now().toString().slice(-10)}`;
+        console.log('📱 Using temporary phone:', finalPhoneNumber);
+      }
+      
+      if (!finalEmail) {
+        finalEmail = `test_${Date.now()}@iqcalorie.com`;
+      }
+      
+    } else {
+      // Try real Stripe session (original logic)
       try {
-        console.log('🔍 Fetching Stripe session details...');
         const session = await stripe.checkout.sessions.retrieve(sessionId);
-        console.log('📋 Session retrieved:', {
-          id: session.id,
-          customer: session.customer,
-          subscription: session.subscription,
-          payment_status: session.payment_status
-        });
-        
-        actualCustomerId = session.customer || 'no_customer';
-        actualSubscriptionId = session.subscription || 'no_subscription';
-        
-        console.log('✅ Extracted Stripe IDs:', {
-          customer_id: actualCustomerId,
-          subscription_id: actualSubscriptionId
-        });
-        
-      } catch (stripeError) {
-        console.error('❌ Error fetching Stripe session:', stripeError);
+        // ... rest of original Stripe logic
+        stripeCustomerId = session.customer || 'unknown';
+        stripeSubscriptionId = session.subscription || 'unknown';
+      } catch (error) {
+        console.log('⚠️ Stripe error, using test fallback');
       }
     }
     
-    // Prepare final user data for Supabase
+    // Format phone if exists
+    if (finalPhoneNumber && !finalPhoneNumber.startsWith('+1000')) {
+      finalPhoneNumber = finalPhoneNumber.toString().trim().replace(/[^\d+]/g, '');
+      if (!finalPhoneNumber.startsWith('+')) {
+        finalPhoneNumber = '+' + finalPhoneNumber;
+      }
+    }
+    
+    // Prepare user data for Supabase
     const finalUserData = {
-      phone_number: userData.phone_number || null,
-      gender: userData.gender || 'male',
-      age: userData.age || 25,
-      height_cm: userData.height_cm || 175,
-      weight_kg: userData.weight_kg || 70,
-      activity_level: userData.activity_level || 'active',
-      kcal_goal: userData.kcal_goal || 2000,
-      prot_goal: userData.prot_goal || 150,
-      carb_goal: userData.carb_goal || 200,
-      fat_goal: userData.fat_goal || 67,
-      stripe_customer_id: actualCustomerId,
-      stripe_subscription_id: actualSubscriptionId,
+      phone_number: finalPhoneNumber,
+      email: finalEmail,
+      stripe_customer_id: stripeCustomerId,
+      stripe_subscription_id: stripeSubscriptionId,
+      gender: userData?.gender || 'male',
+      age: userData?.age || 25,
+      height_cm: userData?.height_cm || 175,
+      weight_kg: userData?.weight_kg || 70,
+      activity_level: userData?.activity_level || 'active',
+      kcal_goal: userData?.kcal_goal || 2000,
+      prot_goal: userData?.prot_goal || 150,
+      carb_goal: userData?.carb_goal || 200,
+      fat_goal: userData?.fat_goal || 67,
       created_at: new Date().toISOString()
     };
     
     console.log('🎯 Final user data for Supabase:', finalUserData);
     
     // Insert into Supabase
-    const { data, error } = await db.from('users').insert(finalUserData).select();
+    const { data, error } = await db.from('users')
+      .upsert(finalUserData, { 
+        onConflict: 'phone_number',
+        returning: 'representation' 
+      })
+      .select();
     
     if (error) {
       console.error('❌ Supabase insert error:', error);
@@ -328,12 +338,183 @@ app.post('/complete-user-setup', async (req, res) => {
       });
     }
     
-    console.log('✅ User successfully created in Supabase:', data[0]);
+    console.log('✅ TEST USER created in Supabase:', data[0]);
+    
+    res.json({ 
+      success: true, 
+      message: 'TEST: User account created successfully',
+      user: data[0],
+      testMode: true
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in test endpoint:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      details: error.message 
+    });
+  }
+});
+
+
+// ============================================================================
+// COMPLETE USER SETUP ROUTE - FIXED VERSION
+// ============================================================================
+
+app.post('/complete-user-setup', async (req, res) => {
+  console.log('🔄 Complete user setup - REQUEST RECEIVED');
+  
+  try {
+    const { checkoutKey, sessionId, stripeData, userData } = req.body;
+    
+    console.log('📦 Received data:');
+    console.log('  - checkoutKey:', checkoutKey);
+    console.log('  - sessionId:', sessionId);
+    console.log('  - userData:', userData);
+    
+    if (!sessionId || sessionId === 'unknown') {
+      return res.status(400).json({ 
+        error: 'Session ID is required to create user' 
+      });
+    }
+    
+    // STEP 1: Get phone from multiple sources
+    let finalPhoneNumber = null;
+    let finalEmail = null;
+    let stripeCustomerId = null;
+    let stripeSubscriptionId = null;
+    
+    try {
+      console.log('🔍 Fetching complete Stripe session details...');
+      
+      // Retrieve session with expanded details
+      const session = await stripe.checkout.sessions.retrieve(sessionId, {
+        expand: ['customer_details', 'customer', 'subscription']
+      });
+
+      console.log('📋 Stripe session retrieved successfully');
+      
+      // Priority 1: Get phone from Stripe checkout (if collected there)
+      if (session.customer_details && session.customer_details.phone) {
+        finalPhoneNumber = session.customer_details.phone;
+        console.log('✅ Phone from Stripe checkout:', finalPhoneNumber);
+      }
+      
+      // Priority 2: Get phone from userData (if captured on landing page)
+      if (!finalPhoneNumber && userData && userData.phone_number) {
+        finalPhoneNumber = userData.phone_number;
+        console.log('✅ Phone from userData:', finalPhoneNumber);
+      }
+      
+      // Get email from Stripe
+      if (session.customer_details && session.customer_details.email) {
+        finalEmail = session.customer_details.email;
+        console.log('✅ Email from Stripe:', finalEmail);
+      } else if (session.customer_email) {
+        finalEmail = session.customer_email;
+        console.log('✅ Email from session:', finalEmail);
+      }
+      
+      // Get Stripe IDs
+      stripeCustomerId = session.customer || 'unknown';
+      stripeSubscriptionId = session.subscription || 'unknown';
+      
+      console.log('🔍 FINAL DATA CHECK:');
+      console.log('  - Phone:', finalPhoneNumber || 'NOT FOUND');
+      console.log('  - Email:', finalEmail || 'NOT FOUND');
+      console.log('  - Customer ID:', stripeCustomerId);
+      console.log('  - Subscription ID:', stripeSubscriptionId);
+      
+    } catch (stripeError) {
+      console.error('❌ Error fetching Stripe session:', stripeError);
+      return res.status(500).json({ 
+        error: 'Failed to retrieve payment information',
+        details: stripeError.message 
+      });
+    }
+    
+    // STEP 2: Handle missing phone scenario
+    if (!finalPhoneNumber) {
+      console.log('⚠️ WARNING: No phone number found in Stripe or userData');
+      console.log('📧 Will use email-based identifier instead');
+      
+      // Create a temporary identifier using email or stripe customer ID
+      if (finalEmail) {
+        // Use email as temporary identifier (Supabase can handle this)
+        finalPhoneNumber = `email:${finalEmail}`;
+        console.log('📱 Using email-based identifier:', finalPhoneNumber);
+      } else {
+        // Last resort: use Stripe customer ID
+        finalPhoneNumber = `stripe:${stripeCustomerId}`;
+        console.log('📱 Using Stripe-based identifier:', finalPhoneNumber);
+      }
+    } else {
+      // Format phone properly if we have it
+      finalPhoneNumber = finalPhoneNumber.toString().trim().replace(/[^\d+]/g, '');
+      if (!finalPhoneNumber.startsWith('+')) {
+        finalPhoneNumber = '+' + finalPhoneNumber;
+      }
+      console.log('📱 Formatted phone number:', finalPhoneNumber);
+    }
+    
+    // STEP 3: Prepare user data for Supabase (matching YOUR table structure)
+    const finalUserData = {
+      // Core identifiers
+      phone_number: finalPhoneNumber,
+      email: finalEmail,
+      
+      // Stripe data
+      stripe_customer_id: stripeCustomerId,
+      stripe_subscription_id: stripeSubscriptionId,
+      
+      // User profile data from onboarding
+      gender: userData?.gender || 'male',
+      age: userData?.age || 25,
+      height_cm: userData?.height_cm || 175,
+      weight_kg: userData?.weight_kg || 70,
+      activity_level: userData?.activity_level || 'active',
+      kcal_goal: userData?.kcal_goal || 2000,
+      prot_goal: userData?.prot_goal || 150,
+      carb_goal: userData?.carb_goal || 200,
+      fat_goal: userData?.fat_goal || 67,
+      
+      // Timestamp
+      created_at: new Date().toISOString()
+    };
+    
+    console.log('🎯 Final user data for Supabase:', finalUserData);
+    
+    // STEP 4: Insert into Supabase
+    const { data, error } = await db.from('users')
+      .upsert(finalUserData, { 
+        onConflict: 'phone_number',
+        returning: 'representation' 
+      })
+      .select();
+    
+    if (error) {
+      console.error('❌ Supabase insert error:', error);
+      return res.status(500).json({ 
+        error: 'Failed to create user account', 
+        details: error.message 
+      });
+    }
+
+    if (!data || data.length === 0) {
+      console.error('❌ No user data returned from Supabase');
+      return res.status(500).json({ 
+        error: 'User creation failed', 
+        details: 'No user data returned' 
+      });
+    }
+    
+    console.log('✅ User successfully created/updated in Supabase:', data[0]);
     
     res.json({ 
       success: true, 
       message: 'User account created successfully',
-      user: data[0]
+      user: data[0],
+      phoneSource: finalPhoneNumber.startsWith('+') ? 'stripe_or_landing' : 'fallback_identifier'
     });
     
   } catch (error) {
@@ -363,8 +544,8 @@ app.post('/trigger-welcome', async (req, res) => {
     let formattedPhone = phone.toString().trim();
     formattedPhone = formattedPhone.replace(/[^\d+]/g, '');
     
-    if (formattedPhone.startsWith('+')) {
-        formattedPhone = '+' + formattedPhone.substring(1).replace(/\D/g, '');
+    if (!formattedPhone.startsWith('+')) {
+        formattedPhone = '+' + formattedPhone;
     }
     
     console.log('📱 Final formatted phone:', formattedPhone);
@@ -465,21 +646,17 @@ I will take these numbers into account when talking to you!`;
   }
 });
 
-// CREATE CHECKOUT SESSION WITH 3-DAY TRIAL
+// CREATE CHECKOUT SESSION WITH 3-DAY TRIAL AND PHONE COLLECTION
 app.post('/create-checkout-session', async (req, res) => {
   console.log('🛒 Creating checkout session with 3-day trial');
   
-  // CORS headers for this endpoint
-  const origin = req.headers.origin || '*';
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
   try {
-    const { priceId, checkoutKey } = req.body;
+    const { priceId, checkoutKey, phoneNumber, email } = req.body;
     
     console.log('Creating session for price:', priceId);
     console.log('Checkout key:', checkoutKey);
+    console.log('Phone from frontend:', phoneNumber || 'Will collect in checkout');
+    console.log('Email from frontend:', email || 'Will collect in checkout');
     
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -491,13 +668,27 @@ app.post('/create-checkout-session', async (req, res) => {
       ],
       mode: 'subscription',
       subscription_data: {
-        trial_period_days: 3  // YOUR 3-DAY FREE TRIAL
+        trial_period_days: 3
       },
       success_url: `https://www.iqcalorie.com/confirmation?session_id={CHECKOUT_SESSION_ID}&checkout_key=${checkoutKey}`,
       cancel_url: 'https://www.iqcalorie.com/choose-your-plan',
+      
+      // COLLECT PHONE (required)
+      phone_number_collection: {
+        enabled: true
+      },
+      
+      // NO customer_email here - this allows email to be editable
+      
+      // Store data in metadata for backup
+      metadata: {
+        phone_number: phoneNumber || '',
+        email: email || '',
+        checkout_key: checkoutKey
+      }
     });
     
-    console.log('✅ Session created:', session.id);
+    console.log('✅ Session created with phone collection:', session.id);
     res.json({ sessionId: session.id });
     
   } catch (error) {
