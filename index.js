@@ -84,6 +84,25 @@ app.post('/cors-test', (req, res) => {
   });
 });
 
+// One-time cleanup endpoint to fix existing Stripe data
+app.post('/cleanup-stripe-data', async (req, res) => {
+  console.log('🧹 Manual cleanup triggered');
+  
+  try {
+    await cleanupExistingStripeData();
+    res.json({ 
+      success: true, 
+      message: 'Stripe data cleanup completed' 
+    });
+  } catch (error) {
+    console.error('❌ Cleanup error:', error);
+    res.status(500).json({ 
+      error: 'Cleanup failed', 
+      details: error.message 
+    });
+  }
+});
+
 // ============================================================================
 // ENVIRONMENT VARIABLES
 // ============================================================================
@@ -104,6 +123,116 @@ const db = createClient(SB_URL, SB_KEY, {
 
 console.log('✅ Supabase client created');
 
+// ============================================================================
+// STRIPE ID CLEANUP UTILITIES
+// ============================================================================
+
+// Extract clean IDs from Stripe objects
+function extractStripeIds(customer, subscription) {
+  const customerId = typeof customer === 'string' ? customer : customer?.id;
+  const subscriptionId = typeof subscription === 'string' ? subscription : subscription?.id;
+  
+  return {
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscriptionId
+  };
+}
+
+// Update user Stripe data with clean IDs
+async function updateUserStripeData(userId, customer, subscription) {
+  const { stripe_customer_id, stripe_subscription_id } = extractStripeIds(customer, subscription);
+  
+  const { error } = await db
+    .from('users')
+    .update({
+      stripe_customer_id,
+      stripe_subscription_id,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', userId);
+    
+  if (error) {
+    console.error('Error updating user Stripe data:', error);
+    throw error;
+  }
+}
+
+// Clean up existing data (run once to fix current records)
+async function cleanupExistingStripeData() {
+  console.log('🧹 Starting Stripe data cleanup...');
+  
+  const { data: users, error } = await db
+    .from('users')
+    .select('id, stripe_customer_id, stripe_subscription_id')
+    .not('stripe_customer_id', 'is', null);
+    
+  if (error) {
+    console.error('Error fetching users:', error);
+    return;
+  }
+  
+  for (const user of users) {
+    let needsUpdate = false;
+    const updates = {};
+    
+    // Clean customer ID if it's a JSON string or object
+    if (user.stripe_customer_id) {
+      let cleanId = user.stripe_customer_id;
+      
+      // If it's a JSON string, parse it and extract ID
+      if (typeof cleanId === 'string' && cleanId.startsWith('{"id"')) {
+        try {
+          const parsed = JSON.parse(cleanId);
+          cleanId = parsed.id;
+          needsUpdate = true;
+        } catch (e) {
+          console.log('Could not parse customer ID:', cleanId);
+        }
+      }
+      // If it's already an object
+      else if (typeof cleanId === 'object' && cleanId.id) {
+        cleanId = cleanId.id;
+        needsUpdate = true;
+      }
+      
+      if (needsUpdate) updates.stripe_customer_id = cleanId;
+    }
+    
+    // Clean subscription ID if it's a JSON string or object
+    if (user.stripe_subscription_id) {
+      let cleanId = user.stripe_subscription_id;
+      
+      // If it's a JSON string, parse it and extract ID
+      if (typeof cleanId === 'string' && cleanId.startsWith('{"id"')) {
+        try {
+          const parsed = JSON.parse(cleanId);
+          cleanId = parsed.id;
+          needsUpdate = true;
+        } catch (e) {
+          console.log('Could not parse subscription ID:', cleanId);
+        }
+      }
+      // If it's already an object
+      else if (typeof cleanId === 'object' && cleanId.id) {
+        cleanId = cleanId.id;
+        needsUpdate = true;
+      }
+      
+      if (needsUpdate) updates.stripe_subscription_id = cleanId;
+    }
+    
+    if (needsUpdate) {
+      console.log(`🔧 Cleaning data for user ${user.id}`);
+      await db
+        .from('users')
+        .update(updates)
+        .eq('id', user.id);
+    }
+  }
+  
+  console.log('✅ Stripe data cleanup completed');
+}
+
 const bars = (used, goals) => `
 🔥 Calories: ${used.kcal}/${goals.kcal} kcal
 🥩 Proteins: ${used.prot}/${goals.prot} g
@@ -115,9 +244,16 @@ const bars = (used, goals) => `
 // ============================================================================
 
 app.post('/webhook', async (req, res) => {
+  console.log('🔥 WEBHOOK HIT - Full request body:', JSON.stringify(req.body, null, 2));
+  
   const twiml = new MessagingResponse();
   const from = req.body.From;
   const bodyText = req.body.Body || '';
+  
+  console.log('📱 Message details:');
+  console.log('  - From:', from);
+  console.log('  - Body:', bodyText);
+  console.log('  - Media URL:', req.body.MediaUrl0 || 'none');
   const mUrl = req.body.MediaUrl0;
   const mType = req.body.MediaContentType0 || '';
   const isImg = mType.startsWith('image/');
@@ -246,6 +382,100 @@ app.post('/webhook', async (req, res) => {
     res.type('text/xml').send(twiml.toString());
   }
 });
+
+// ============================================================================
+// VOICE VERIFICATION WEBHOOK WITH RECORDING (for Facebook phone call)
+// ============================================================================
+
+app.post('/webhook-voice-verification', (req, res) => {
+  console.log('📞 VOICE VERIFICATION CALL RECEIVED:');
+  console.log('  - Full request body:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const from = req.body.From || 'unknown';
+    const callSid = req.body.CallSid || 'unknown';
+    
+    console.log('  - From:', from);
+    console.log('  - Call SID:', callSid);
+    
+    // Create TwiML response to RECORD the incoming call
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Recording verification call from Facebook</Say>
+    <Record 
+        timeout="30" 
+        maxLength="60" 
+        action="https://bass-ethical-piranha.ngrok-free.app/process-recording" 
+        method="POST"
+        transcribe="true"
+        transcribeCallback="https://bass-ethical-piranha.ngrok-free.app/transcription-complete"
+    />
+    <Say voice="alice">Recording complete</Say>
+</Response>`;
+    
+    console.log('🎙️ Recording Facebook verification call...');
+    console.log('📤 TwiML Response sent with recording instructions');
+    
+    res.type('text/xml').send(twiml);
+    
+  } catch (error) {
+    console.error('❌ Error in voice verification:', error);
+    res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Error occurred</Say></Response>');
+  }
+});
+
+// ============================================================================
+// PROCESS RECORDING WEBHOOK (after recording is done)
+// ============================================================================
+
+app.post('/process-recording', (req, res) => {
+  console.log('🎵 RECORDING COMPLETED:');
+  console.log('  - Full request body:', JSON.stringify(req.body, null, 2));
+  
+  const recordingUrl = req.body.RecordingUrl;
+  const recordingSid = req.body.RecordingSid;
+  
+  console.log('🔗 Recording URL:', recordingUrl);
+  console.log('📁 Recording SID:', recordingSid);
+  console.log('👆 You can listen to this recording to hear Facebook\'s verification code');
+  
+  // End the call
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Hangup/>
+</Response>`;
+  
+  res.type('text/xml').send(twiml);
+});
+
+// ============================================================================
+// TRANSCRIPTION WEBHOOK (Twilio converts speech to text)
+// ============================================================================
+
+app.post('/transcription-complete', (req, res) => {
+  console.log('📝 TRANSCRIPTION COMPLETED:');
+  console.log('  - Full request body:', JSON.stringify(req.body, null, 2));
+  
+  const transcriptionText = req.body.TranscriptionText || '';
+  const transcriptionStatus = req.body.TranscriptionStatus;
+  
+  console.log('📄 Transcription Status:', transcriptionStatus);
+  console.log('📄 Transcription Text:', transcriptionText);
+  
+  // Extract verification code from transcription
+  const codeMatch = transcriptionText.match(/\d{6}/);
+  if (codeMatch) {
+    console.log('🔑 FACEBOOK VERIFICATION CODE FOUND:', codeMatch[0]);
+    console.log('👆 USE THIS CODE IN FACEBOOK SETUP');
+  } else {
+    console.log('⚠️ No 6-digit code found in transcription');
+    console.log('💡 Check the recording URL to manually listen for the code');
+  }
+  
+  res.status(200).send('OK');
+});
+
+
 
 // ============================================================================
 // TEST VERSION OF COMPLETE USER SETUP (for Postman testing)
@@ -378,7 +608,7 @@ app.post('/complete-user-setup', async (req, res) => {
       });
     }
     
-    // STEP 1: Get phone from multiple sources
+    // STEP 1: Get phone from Stripe ONLY (source of truth)
     let finalPhoneNumber = null;
     let finalEmail = null;
     let stripeCustomerId = null;
@@ -394,16 +624,14 @@ app.post('/complete-user-setup', async (req, res) => {
 
       console.log('📋 Stripe session retrieved successfully');
       
-      // Priority 1: Get phone from Stripe checkout (if collected there)
-      if (session.customer_details && session.customer_details.phone) {
-        finalPhoneNumber = session.customer_details.phone;
-        console.log('✅ Phone from Stripe checkout:', finalPhoneNumber);
-      }
+      // Always use Stripe phone as source of truth, ignore localStorage
+      finalPhoneNumber = session.customer_details?.phone;
+      // Don't even check userData.phone_number
       
-      // Priority 2: Get phone from userData (if captured on landing page)
-      if (!finalPhoneNumber && userData && userData.phone_number) {
-        finalPhoneNumber = userData.phone_number;
-        console.log('✅ Phone from userData:', finalPhoneNumber);
+      if (finalPhoneNumber) {
+        console.log('✅ Phone from Stripe (source of truth):', finalPhoneNumber);
+      } else {
+        console.log('⚠️ No phone number in Stripe checkout');
       }
       
       // Get email from Stripe
@@ -415,9 +643,13 @@ app.post('/complete-user-setup', async (req, res) => {
         console.log('✅ Email from session:', finalEmail);
       }
       
-      // Get Stripe IDs
-      stripeCustomerId = session.customer || 'unknown';
-      stripeSubscriptionId = session.subscription || 'unknown';
+      // Get clean Stripe IDs using utility function
+      const { stripe_customer_id, stripe_subscription_id } = extractStripeIds(
+        session.customer, 
+        session.subscription
+      );
+      stripeCustomerId = stripe_customer_id || 'unknown';
+      stripeSubscriptionId = stripe_subscription_id || 'unknown';
       
       console.log('🔍 FINAL DATA CHECK:');
       console.log('  - Phone:', finalPhoneNumber || 'NOT FOUND');
@@ -616,7 +848,7 @@ I will take these numbers into account when talking to you!`;
       const twilio = require('twilio')(process.env.ACCOUNT_SID, process.env.AUTH_TOKEN);
       
       const message = await twilio.messages.create({
-        from: 'whatsapp:+14155238886',
+        from: 'whatsapp:+447888873477',
         to: `whatsapp:${formattedPhone}`,
         body: welcomeMessage
       });
