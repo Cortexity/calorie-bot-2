@@ -239,29 +239,107 @@ const bars = (used, goals) => `
 🥔 Carbs:    ${used.carb}/${goals.carb} g
 🧈 Fats:     ${used.fat}/${goals.fat} g`;
 
+// 🔒 SECURITY: Verify user authorization and payment status
+async function verifyUserAuthorization(phone) {
+  console.log('🔍 Verifying user authorization for:', phone);
+  
+  try {
+    // Check if user exists in database
+    const { data: users, error } = await db
+      .from('users')
+      .select('id, phone_number, stripe_customer_id, stripe_subscription_id, email')
+      .eq('phone_number', phone)
+      .limit(1);
+    
+    if (error) {
+      console.error('⚠️ Database error during verification:', error);
+      return { authorized: false, reason: 'database_error' };
+    }
+    
+    if (!users || users.length === 0) {
+      console.log('🚫 UNAUTHORIZED: User not in database:', phone);
+      return { authorized: false, reason: 'user_not_found' };
+    }
+    
+    const user = users[0];
+    
+    // Check for valid Stripe data
+    if (!user.stripe_customer_id || !user.stripe_subscription_id) {
+      console.log('🚫 UNAUTHORIZED: User missing payment data:', phone);
+      return { authorized: false, reason: 'missing_payment', user };
+    }
+    
+    console.log('✅ User authorized:', phone);
+    return { authorized: true, user };
+    
+  } catch (error) {
+    console.error('⚠️ Authorization verification failed:', error);
+    return { authorized: false, reason: 'verification_error' };
+  }
+}
+
+// 🛡️ ABUSE PROTECTION: Track unauthorized attempts
+const unauthorizedAttempts = new Map();
+
+function trackUnauthorizedAttempt(phone) {
+  const now = Date.now();
+  const attempts = unauthorizedAttempts.get(phone) || [];
+  
+  // Clean old attempts (older than 1 hour)
+  const recentAttempts = attempts.filter(time => now - time < 3600000);
+  recentAttempts.push(now);
+  
+  unauthorizedAttempts.set(phone, recentAttempts);
+  
+  console.log(`🚨 Tracking: ${phone} made ${recentAttempts.length} unauthorized attempts in last hour`);
+  
+  if (recentAttempts.length > 10) {
+    console.log(`🚨 HIGH-RISK ABUSER: ${phone} - ${recentAttempts.length} attempts`);
+  }
+  
+  return recentAttempts.length;
+}
+
 // ============================================================================
 // WHATSAPP WEBHOOK
 // ============================================================================
 
 app.post('/webhook', async (req, res) => {
-  console.log('🔥 WEBHOOK HIT - Full request body:', JSON.stringify(req.body, null, 2));
-  
   const twiml = new MessagingResponse();
   const from = req.body.From;
   const bodyText = req.body.Body || '';
-  
-  console.log('📱 Message details:');
-  console.log('  - From:', from);
-  console.log('  - Body:', bodyText);
-  console.log('  - Media URL:', req.body.MediaUrl0 || 'none');
   const mUrl = req.body.MediaUrl0;
   const mType = req.body.MediaContentType0 || '';
   const isImg = mType.startsWith('image/');
   const isAudio = mType.startsWith('audio/');
 
-  console.log('✅ Webhook received:', {
+  console.log('🔥 WEBHOOK HIT:', {
     From: from, Body: bodyText.slice(0, 50), Img: isImg, Audio: isAudio
   });
+
+  const phone = from.replace('whatsapp:', '');
+  
+  // 🔒 SECURITY CHECK: Verify user authorization FIRST
+  const authResult = await verifyUserAuthorization(phone);
+  
+  if (!authResult.authorized) {
+    // Track this unauthorized attempt
+    const attemptCount = trackUnauthorizedAttempt(phone);
+    
+    console.log('🚫 SILENT BLOCK: Ignoring unauthorized user');
+    console.log('   - Phone:', phone);
+    console.log('   - Reason:', authResult.reason);
+    console.log('   - Attempts:', attemptCount);
+    console.log('   - Action: Complete ignore (no response sent)');
+    console.log('   - Protection: Saving OpenAI API costs');
+    
+    // 🚨 IMPORTANT: Return empty TwiML response (no message sent)
+    return res.type('text/xml').send('<Response></Response>');
+  }
+  
+  console.log('✅ AUTHORIZED USER - Processing message');
+  console.log(`   - Phone: ${phone}`);
+  console.log(`   - User ID: ${authResult.user.id}`);
 
   let text = bodyText.trim();
 
@@ -290,9 +368,9 @@ app.post('/webhook', async (req, res) => {
 🥔 *Carbs:* <g> g  
 🧈 *Fats:* <g> g
 
-🔔 *Assumptions:* give precise measurements with units, comma-separated, end with 🙂
+📝 *Assumptions:* give precise measurements with units, comma-separated, end with 🙂
 
-⌛ *Daily Progress:*  
+⏱️ *Daily Progress:*  
 \${bars}
 
 <one motivational sentence + ask them how did that meal feel + emoji>
@@ -317,24 +395,17 @@ app.post('/webhook', async (req, res) => {
       msgs.push({ role: 'user', content: 'Hi' });
     }
 
-    const phone = from.replace('whatsapp:', '');
     const today = new Date().toISOString().slice(0, 10);
 
+    // User is already verified as authorized, get their data
     let { data, error } = await db.rpc('get_user_data', { p_phone: phone, p_date: today });
-    if (error) console.error('❌ Supabase RPC error:', error);
-    console.log('📦 Supabase RPC result:', data);
+    if (error) console.error('⚠️ Supabase RPC error:', error);
 
     let row = data?.[0];
     if (!row) {
-      const { error: insertUserErr } = await db.from('users')
-        .upsert({ phone_number: phone }, { onConflict: 'phone_number' });
-      if (insertUserErr) {
-        console.error('❌ User insert error:', insertUserErr);
-        twiml.message('⚠️ Failed to create user. Please try again.');
-        return res.type('text/xml').send(twiml.toString());
-      }
-      ({ data, error } = await db.rpc('get_user_data', { p_phone: phone, p_date: today }));
-      row = data?.[0];
+      console.error('⚠️ Authorized user has no data in get_user_data RPC');
+      twiml.message('⚠️ Account error. Please contact support.');
+      return res.type('text/xml').send(twiml.toString());
     }
 
     const goals = { kcal: row.kcal_goal, prot: row.prot_goal, carb: row.carb_goal, fat: row.fat_goal };
@@ -377,7 +448,7 @@ app.post('/webhook', async (req, res) => {
     console.log('💬 Final reply sent.');
     res.type('text/xml').send(twiml.toString());
   } catch (err) {
-    console.error('❌ Error in webhook:', err);
+    console.error('⚠️ Error in webhook:', err);
     twiml.message('⚠️ Something went wrong. Please try again.');
     res.type('text/xml').send(twiml.toString());
   }
@@ -1048,6 +1119,34 @@ app.post('/proxy-setup', async (req, res) => {
     console.error('Proxy error:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// ============================================================================
+// SECURITY MONITORING ENDPOINT
+// ============================================================================
+
+app.get('/security-dashboard', (req, res) => {
+  console.log('🔍 Security dashboard accessed');
+  
+  const summary = {
+    timestamp: new Date().toISOString(),
+    unauthorized_attempts: Object.fromEntries(unauthorizedAttempts),
+    total_blocked_numbers: unauthorizedAttempts.size,
+    high_risk_numbers: []
+  };
+  
+  // Identify high-risk numbers (more than 5 attempts)
+  for (const [phone, attempts] of unauthorizedAttempts) {
+    if (attempts.length > 5) {
+      summary.high_risk_numbers.push({
+        phone,
+        attempts: attempts.length,
+        last_attempt: new Date(Math.max(...attempts)).toISOString()
+      });
+    }
+  }
+  
+  res.json(summary);
 });
 
 // ============================================================================
