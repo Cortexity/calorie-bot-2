@@ -341,6 +341,25 @@ app.post('/webhook', async (req, res) => {
   console.log(`   - Phone: ${phone}`);
   console.log(`   - User ID: ${authResult.user.id}`);
 
+  // Get user's first name for personalization
+  let userFirstName = null;
+  try {
+    const { data: userDetails, error: nameError } = await db
+      .from('users')
+      .select('first_name')
+      .eq('phone_number', phone)
+      .limit(1);
+    
+    if (userDetails && userDetails[0] && userDetails[0].first_name) {
+      userFirstName = userDetails[0].first_name;
+      console.log('👋 User first name retrieved:', userFirstName);
+    } else {
+      console.log('📝 No first name found for user');
+    }
+  } catch (error) {
+    console.log('⚠️ Error fetching user name:', error);
+  }
+
   let text = bodyText.trim();
 
   try {
@@ -355,9 +374,22 @@ app.post('/webhook', async (req, res) => {
       text = wr.data.text;
     }
 
+    // Build conversational system prompt with personalization
+    const nameContext = userFirstName 
+      ? `The user's name is ${userFirstName}. Use their name naturally in greetings and when appropriate, but don't overuse it.` 
+      : ``;
+
     const msgs = [{
       role: 'system',
-      content: `You are *IQCalorie*, a WhatsApp nutrition coach. Always respond in English. Use the following standardized response everytime food is detected:
+      content: `You are *IQCalorie*, a friendly and empatheticWhatsApp nutrition coach and AI assistant. ${nameContext} 
+
+You're helpful, conversational, and knowledgeable about nutrition. Respond naturally to any questions or conversations, but your specialty is nutrition and meal tracking. Always respond in English.
+
+When users ask about things outside nutrition, respond politely and conversationally (like a normal AI assistant would), then guide them back to tracking meals by reminding them that you are to help with meal tracking and supporting their health journey.
+
+Format all responses outside nutrition and health in short, spaced-out paragraphs (separate ideas with line breaks). Avoid long text blocks — make replies easy to read in chat style.
+
+For meal logging, use this standardized response format:
 
 ✅ *Meal logged successfully!*
 
@@ -368,9 +400,9 @@ app.post('/webhook', async (req, res) => {
 🥔 *Carbs:* <g> g  
 🧈 *Fats:* <g> g
 
-📝 *Assumptions:* give precise measurements with units, comma-separated, end with 🙂
+🔔 *Assumptions:* give precise measurements with units, comma-separated, end with 🙂
 
-⏱️ *Daily Progress:*  
+⏳ *Daily Progress:*  
 \${bars}
 
 <one motivational sentence + ask them how did that meal feel + emoji>
@@ -425,13 +457,173 @@ app.post('/webhook', async (req, res) => {
   console.log('💰 OPENAI API CALL COMPLETED');
   console.log(`   - Response tokens: ~${gpt.data.choices[0].message.content.length / 4}`);
 
-    let reply = gpt.data.choices[0].message.content;
-    console.log('🧾 GPT raw reply:\n', reply);
+  let reply = gpt.data.choices[0].message.content;
+  console.log('🧾 GPT raw reply:\n', reply);
 
+  // Check for update/delete requests first
+  const userMessage = text.toLowerCase();
+  const isUpdateRequest = /actually|instead|correction|meant|ate.*not|really ate|it was/i.test(userMessage);
+  const isDeleteRequest = /delete|remove|didn't eat|never ate|cancel|take off/i.test(userMessage);
+
+  if (isDeleteRequest) {
+    console.log('🗑️ Processing DELETE request');
+    
+    // Get the most recent meal to delete (simplified approach)
+    const { data: recentMeals, error: mealError } = await db
+      .from('meal_logs')
+      .select('*')
+      .eq('user_phone', phone)
+      .gte('created_at', today + 'T00:00:00')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    console.log('🔍 Recent meals found:', recentMeals);
+
+    if (recentMeals && recentMeals.length > 0) {
+      const mealToDelete = recentMeals[0];
+      console.log('🗑️ Deleting meal:', mealToDelete);
+      
+      // Delete from meal_logs
+      const { error: deleteError } = await db
+        .from('meal_logs')
+        .delete()
+        .eq('id', mealToDelete.id);
+
+      if (deleteError) {
+        console.error('❌ Delete error:', deleteError);
+      } else {
+        console.log('✅ Meal deleted from meal_logs');
+      }
+
+      // Subtract from daily totals
+      const { error: totalsError } = await db.rpc('increment_daily_totals', {
+        p_phone: phone,
+        p_date: today,
+        p_kcal: -mealToDelete.kcal,
+        p_prot: -mealToDelete.prot,
+        p_carb: -mealToDelete.carb,
+        p_fat: -mealToDelete.fat
+      });
+
+      if (totalsError) {
+        console.error('❌ Totals update error:', totalsError);
+      } else {
+        console.log('✅ Daily totals updated');
+      }
+
+      // Update used values
+      used.kcal = Math.max(0, used.kcal - mealToDelete.kcal);
+      used.prot = Math.max(0, used.prot - mealToDelete.prot);
+      used.carb = Math.max(0, used.carb - mealToDelete.carb);
+      used.fat = Math.max(0, used.fat - mealToDelete.fat);
+
+      console.log('📊 Updated used values:', used);
+
+      // Override reply with delete confirmation
+      reply = `✅ Meal removed from today's log.
+
+⏳ Daily Progress:
+${bars(used, goals)}
+
+Okay, that's removed. Anything else I can help with right now?`;
+      
+      console.log('✅ Meal deleted and totals updated.');
+    } else {
+      console.log('❌ No recent meals found to delete');
+      reply = "I couldn't find any recent meals to delete. Could you try logging a meal first?";
+    }
+  } else if (isUpdateRequest) {
+    console.log('🔄 Processing UPDATE request');
+    
     const flat = reply.replace(/\n/g, ' ');
     const macroRegex = /Calories[^\d]*(\d+)[^]*?Proteins[^\d]*(\d+)[^]*?Carbs[^\d]*(\d+)[^]*?Fats[^\d]*(\d+)/i;
     const match = flat.match(macroRegex);
-    console.log('🔎 Regex match:', match);
+    
+    if (match) {
+      const [_, kcal, prot, carb, fat] = match.map(Number);
+      console.log('🔄 New macros:', { kcal, prot, carb, fat });
+      
+      // Get the most recent meal to update
+      const { data: recentMeals, error: mealError } = await db
+        .from('meal_logs')
+        .select('*')
+        .eq('user_phone', phone)
+        .gte('created_at', today + 'T00:00:00')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      console.log('🔍 Recent meals for update:', recentMeals);
+
+      if (recentMeals && recentMeals.length > 0) {
+        const oldMeal = recentMeals[0];
+        console.log('📝 Old meal to update:', oldMeal);
+        
+        // Update the meal_logs entry
+        const { error: updateError } = await db
+          .from('meal_logs')
+          .update({ 
+            kcal: kcal, 
+            prot: prot, 
+            carb: carb, 
+            fat: fat, 
+            created_at: new Date() 
+          })
+          .eq('id', oldMeal.id);
+
+        if (updateError) {
+          console.error('❌ Update error:', updateError);
+        } else {
+          console.log('✅ Meal updated in database');
+        }
+
+        // Calculate the difference and update daily totals
+        const kcalDiff = kcal - oldMeal.kcal;
+        const protDiff = prot - oldMeal.prot;
+        const carbDiff = carb - oldMeal.carb;
+        const fatDiff = fat - oldMeal.fat;
+
+        console.log('📊 Differences:', { kcalDiff, protDiff, carbDiff, fatDiff });
+
+        const { error: totalsError } = await db.rpc('increment_daily_totals', {
+          p_phone: phone,
+          p_date: today,
+          p_kcal: kcalDiff,
+          p_prot: protDiff,
+          p_carb: carbDiff,
+          p_fat: fatDiff
+        });
+
+        if (totalsError) {
+          console.error('❌ Totals update error:', totalsError);
+        } else {
+          console.log('✅ Daily totals updated with differences');
+        }
+
+        // Update used values
+        used.kcal += kcalDiff;
+        used.prot += protDiff;
+        used.carb += carbDiff;
+        used.fat += fatDiff;
+
+        console.log('📊 Updated used values:', used);
+
+        // Modify reply to show "updated" instead of "logged"
+        reply = reply.replace('✅ *Meal logged successfully!*', '✅ *Meal updated successfully!*');
+        reply = reply.replace('Meal logged successfully!', 'Meal updated successfully!');
+        
+        console.log('✅ Meal updated and totals adjusted.');
+      } else {
+        console.log('❌ No recent meals found to update');
+      }
+    } else {
+      console.log('❌ No macros found in GPT response for update');
+    }
+  } else {
+    // Regular new meal logging
+    const flat = reply.replace(/\n/g, ' ');
+    const macroRegex = /Calories[^\d]*(\d+)[^]*?Proteins[^\d]*(\d+)[^]*?Carbs[^\d]*(\d+)[^]*?Fats[^\d]*(\d+)/i;
+    const match = flat.match(macroRegex);
+    console.log('🔍 Regex match:', match);
 
     if (match) {
       const [_, kcal, prot, carb, fat] = match.map(Number);
@@ -449,6 +641,7 @@ app.post('/webhook', async (req, res) => {
     } else {
       console.warn('⚠️ Could not extract macros.');
     }
+  }
 
     reply = reply.replace(/\$\{(progress_bars|bars)\}/g, bars(used, goals));
     twiml.message(reply);
@@ -686,9 +879,11 @@ app.post('/complete-user-setup', async (req, res) => {
       });
     }
     
-    // STEP 1: Get phone from Stripe ONLY (source of truth)
+    // STEP 1: Get phone, email, and names from Stripe ONLY (source of truth)
     let finalPhoneNumber = null;
     let finalEmail = null;
+    let finalFirstName = null;
+    let finalLastName = null;
     let stripeCustomerId = null;
     let stripeSubscriptionId = null;
     
@@ -704,7 +899,6 @@ app.post('/complete-user-setup', async (req, res) => {
       
       // Always use Stripe phone as source of truth, ignore localStorage
       finalPhoneNumber = session.customer_details?.phone;
-      // Don't even check userData.phone_number
       
       if (finalPhoneNumber) {
         console.log('✅ Phone from Stripe (source of truth):', finalPhoneNumber);
@@ -721,6 +915,24 @@ app.post('/complete-user-setup', async (req, res) => {
         console.log('✅ Email from session:', finalEmail);
       }
       
+      // Get names from custom fields
+      if (session.custom_fields && session.custom_fields.length > 0) {
+        console.log('🔍 Processing custom fields:', session.custom_fields);
+        
+        session.custom_fields.forEach(field => {
+          if (field.key === 'first_name') {
+            finalFirstName = field.text?.value || null;
+            console.log('✅ First name from Stripe:', finalFirstName);
+          }
+          if (field.key === 'last_name') {
+            finalLastName = field.text?.value || null;
+            console.log('✅ Last name from Stripe:', finalLastName);
+          }
+        });
+      } else {
+        console.log('⚠️ No custom fields found in session');
+      }
+      
       // Get clean Stripe IDs using utility function
       const { stripe_customer_id, stripe_subscription_id } = extractStripeIds(
         session.customer, 
@@ -732,6 +944,8 @@ app.post('/complete-user-setup', async (req, res) => {
       console.log('🔍 FINAL DATA CHECK:');
       console.log('  - Phone:', finalPhoneNumber || 'NOT FOUND');
       console.log('  - Email:', finalEmail || 'NOT FOUND');
+      console.log('  - First Name:', finalFirstName || 'NOT FOUND');
+      console.log('  - Last Name:', finalLastName || 'NOT FOUND');
       console.log('  - Customer ID:', stripeCustomerId);
       console.log('  - Subscription ID:', stripeSubscriptionId);
       
@@ -772,6 +986,8 @@ app.post('/complete-user-setup', async (req, res) => {
       // Core identifiers
       phone_number: finalPhoneNumber,
       email: finalEmail,
+      first_name: finalFirstName,
+      last_name: finalLastName,
       
       // Stripe data
       stripe_customer_id: stripeCustomerId,
@@ -898,7 +1114,24 @@ app.post('/trigger-welcome', async (req, res) => {
     if (fitnessGoal === 'lose_weight') actualTDEE = actualCalories + 300;
     else if (fitnessGoal === 'gain_weight') actualTDEE = actualCalories - 300;
     
-    const welcomeMessage = `Welcome to *IQCalorie* 🔥
+    // Get user's first name for personalization
+    const { data: userRecord, error: userError } = await db
+      .from('users')
+      .select('first_name, last_name')
+      .eq('phone_number', formattedPhone)
+      .limit(1);
+    
+    const firstName = userRecord && userRecord[0] && userRecord[0].first_name 
+      ? userRecord[0].first_name 
+      : '';
+    
+    const personalGreeting = firstName 
+      ? `Welcome to *IQCalorie*, ${firstName}! 🔥` 
+      : `Welcome to *IQCalorie*! 🔥`;
+    
+    console.log('👋 Personal greeting:', personalGreeting);
+
+    const welcomeMessage = `${personalGreeting}
 
 🚀 You're all set and ready to go!
 
@@ -958,7 +1191,7 @@ I will take these numbers into account when talking to you!`;
 
 // CREATE CHECKOUT SESSION WITH 3-DAY TRIAL AND PHONE COLLECTION
 app.post('/create-checkout-session', async (req, res) => {
-  console.log('🛒 Creating checkout session with 3-day trial');
+  console.log('🛒 Creating checkout session with 3-day trial and name collection');
   
   try {
     const { priceId, checkoutKey, phoneNumber, email } = req.body;
@@ -988,7 +1221,27 @@ app.post('/create-checkout-session', async (req, res) => {
         enabled: true
       },
       
-      // NO customer_email here - this allows email to be editable
+      // COLLECT CUSTOMER DETAILS including name
+      custom_fields: [
+        {
+          key: 'first_name',
+          label: {
+            type: 'custom',
+            custom: 'First Name'
+          },
+          type: 'text',
+          optional: false
+        },
+        {
+          key: 'last_name',
+          label: {
+            type: 'custom',
+            custom: 'Last Name'
+          },
+          type: 'text',
+          optional: false
+        }
+      ],
       
       // Store data in metadata for backup
       metadata: {
@@ -998,7 +1251,7 @@ app.post('/create-checkout-session', async (req, res) => {
       }
     });
     
-    console.log('✅ Session created with phone collection:', session.id);
+    console.log('✅ Session created with phone and name collection:', session.id);
     res.json({ sessionId: session.id });
     
   } catch (error) {
