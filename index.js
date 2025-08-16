@@ -411,12 +411,19 @@ app.post('/webhook', async (req, res) => {
     const goals = { kcal: row.kcal_goal, prot: row.prot_goal, carb: row.carb_goal, fat: row.fat_goal };
     const used = { kcal: row.kcal_used, prot: row.prot_used, carb: row.carb_used, fat: row.fat_used };
 
+    console.log('💰 MAKING OPENAI API CALL - This will cost money');
+    console.log(`   - User: ${phone}`);
+    console.log(`   - Message tokens: ~${JSON.stringify(msgs).length / 4}`);
+
     const gpt = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: 'gpt-4o',
-      messages: msgs,
-      max_tokens: 700,
-      temperature: 0.1
-    }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
+    model: 'gpt-4o',
+    messages: msgs,
+    max_tokens: 700,
+    temperature: 0.1
+  }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
+
+  console.log('💰 OPENAI API CALL COMPLETED');
+  console.log(`   - Response tokens: ~${gpt.data.choices[0].message.content.length / 4}`);
 
     let reply = gpt.data.choices[0].message.content;
     console.log('🧾 GPT raw reply:\n', reply);
@@ -1137,14 +1144,20 @@ app.get('/security-dashboard', (req, res) => {
   
   // Identify high-risk numbers (more than 5 attempts)
   for (const [phone, attempts] of unauthorizedAttempts) {
-    if (attempts.length > 5) {
-      summary.high_risk_numbers.push({
-        phone,
-        attempts: attempts.length,
-        last_attempt: new Date(Math.max(...attempts)).toISOString()
-      });
-    }
+    const readableAttempts = attempts.map(timestamp => new Date(timestamp).toISOString());
+  
+  if (attempts.length > 5) {
+    summary.high_risk_numbers.push({
+      phone,
+      attempts: attempts.length,
+      attempt_times: readableAttempts,
+      last_attempt: new Date(Math.max(...attempts)).toISOString()
+    });
   }
+  
+  // Add all attempts with readable timestamps
+  summary.unauthorized_attempts[phone] = readableAttempts;
+}
   
   res.json(summary);
 });
