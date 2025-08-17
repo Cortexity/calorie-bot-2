@@ -1,8 +1,7 @@
 // index.js
 
 require('dotenv').config();
-console.log('🚀 DEPLOYMENT VERSION: 2.0 - CORS FIXED - ' + new Date().toISOString());
-
+console.log('🚀 DEPLOYMENT VERSION: 2.1 - MEAL DESCRIPTIONS ADDED - ' + new Date().toISOString());
 
 const express = require('express');
 const axios = require('axios');
@@ -47,14 +46,14 @@ app.get('/', (req, res) => {
   res.json({ 
     status: 'OK',
     service: 'calorie-bot-2',
-    version: '2.0',
+    version: '2.1',
     timestamp: new Date().toISOString()
   });
 });
 
 // Simple test endpoint
 app.get('/test', (req, res) => {
-  console.log('📍 GET /test endpoint hit');
+  console.log('🔍 GET /test endpoint hit');
   res.json({ 
     message: 'Server is working!',
     origin: req.headers.origin,
@@ -234,10 +233,10 @@ async function cleanupExistingStripeData() {
 }
 
 const bars = (used, goals) => `
-🔥 Calories: ${used.kcal}/${goals.kcal} kcal
-🥩 Proteins: ${used.prot}/${goals.prot} g
-🥔 Carbs:    ${used.carb}/${goals.carb} g
-🧈 Fats:     ${used.fat}/${goals.fat} g`;
+🔥 *Calories:* ${used.kcal}/${goals.kcal} kcal
+🥩 *Proteins:* ${used.prot}/${goals.prot} g
+🥔 *Carbs:* ${used.carb}/${goals.carb} g
+🧈 *Fats:* ${used.fat}/${goals.fat} g`;
 
 // 🔒 SECURITY: Verify user authorization and payment status
 async function verifyUserAuthorization(phone) {
@@ -354,7 +353,7 @@ app.post('/webhook', async (req, res) => {
       userFirstName = userDetails[0].first_name;
       console.log('👋 User first name retrieved:', userFirstName);
     } else {
-      console.log('📝 No first name found for user');
+      console.log('🔍 No first name found for user');
     }
   } catch (error) {
     console.log('⚠️ Error fetching user name:', error);
@@ -379,38 +378,48 @@ app.post('/webhook', async (req, res) => {
       ? `The user's name is ${userFirstName}. Use their name naturally in greetings and when appropriate, but don't overuse it.` 
       : ``;
 
-    const msgs = [{
+      const msgs = [{
       role: 'system',
-      content: `You are *IQCalorie*, a friendly and empatheticWhatsApp nutrition coach and AI assistant. ${nameContext} 
+      content: `You are an expert nutrition tracking assistant for the IQ Calorie Whatsapp app. You specialize in analyzing food and providing accurate macro breakdowns. ${nameContext} 
+      
+      Core responsibilities:
+      - Analyze food photos and descriptions to estimate calories and macros
+      - Help users track their daily nutrition goals
+      - Provide supportive, motivational responses
+      - Always respond in English with a friendly, encouraging tone
 
-You're helpful, conversational, and knowledgeable about nutrition. Respond naturally to any questions or conversations, but your specialty is nutrition and meal tracking. Always respond in English.
+      Key guidelines:
+      - For meal inputs (photos or descriptions), always provide nutritional estimates in the standardized format
+      - When food details are vague, make reasonable assumptions and explain them clearly
+      - Be generous with portion estimates when uncertain (users prefer slightly higher estimates)
+      - Use common sense for meal timing (breakfast, lunch, dinner, snack) based on food type
+      - Always end meal logs with encouragement and ask about their progress
+      
+      Response formatting:
+      - When responding to questions that should NOT use the standardized meal format, break your answer into small, readable paragraphs
+      - Keep paragraphs short (1-3 sentences each) for easy reading on mobile
+      - Use natural, conversational language
 
-When users ask about things outside nutrition, respond politely and conversationally (like a normal AI assistant would), then guide them back to tracking meals by reminding them that you are to help with meal tracking and supporting their health journey.
-
-Format all responses outside nutrition and health in short, spaced-out paragraphs (separate ideas with line breaks). Avoid long text blocks — make replies easy to read in chat style.
-
-When users send vague meal inputs (e.g., “I ate chicken”, “I ate ramen soup”), always create a meal log. Make assumptions about portion sizes. Do not ask the user for clarification — respond with a completed meal log based on likely assumptions.
-
-For meal logging, use this standardized response format:
-
-✅ *Meal logged successfully!*
-
-🍽️ *<MealType>:* <brief label>
-
-🔥 *Calories:* <kcal> kcal  
-🥩 *Proteins:* <g> g  
-🥔 *Carbs:* <g> g  
-🧈 *Fats:* <g> g
-
-🔔 *Assumptions:* give precise measurements with units, comma-separated, end with "Let me know if you'd like any adjustments 🙂"
-
-⏳ *Daily Progress:*  
-\${bars}
-
-<one motivational sentence + ask them how did that meal feel + emoji>
-
-!! NEVER use graphical bars manually. Only include the literal string "\${bars}".`
-    }];
+  When users send meal inputs, create a meal log using this format every time:
+  
+  ✅ *Meal logged successfully!*
+  
+  🍽️ *<MealType>:* <brief label>
+  
+  🔥 *Calories:* <kcal> kcal  
+  🥩 *Proteins:* <g> g  
+  🥔 *Carbs:* <g> g  
+  🧈 *Fats:* <g> g
+  
+  📝 *Assumptions:* give precise size and portion measurements with units in g/oz/mL, comma-separated, end with "Let me know if you'd like any adjustments 🙂"
+  
+  ⏳ *Daily Progress:*  
+  \${bars}
+  
+  <one motivational sentence + ask them how they are feeling about their progress + relevant emoji>
+  
+  !! NEVER use graphical bars manually. Only include the literal string "\${bars}".`
+      }];
 
     if (isImg && mUrl) {
       const auth = { Authorization: 'Basic ' + Buffer.from(`${ACC}:${TOK}`).toString('base64') };
@@ -450,102 +459,45 @@ For meal logging, use this standardized response format:
     console.log(`   - Message tokens: ~${JSON.stringify(msgs).length / 4}`);
 
     const gpt = await axios.post('https://api.openai.com/v1/chat/completions', {
-    model: 'gpt-4o',
-    messages: msgs,
-    max_tokens: 700,
-    temperature: 0.1
-  }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
+      model: 'gpt-4o',
+      messages: msgs,
+      max_tokens: 700,
+      temperature: 0.1
+    }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
 
-  console.log('💰 OPENAI API CALL COMPLETED');
-  console.log(`   - Response tokens: ~${gpt.data.choices[0].message.content.length / 4}`);
+    console.log('💰 OPENAI API CALL COMPLETED');
+    console.log(`   - Response tokens: ~${gpt.data.choices[0].message.content.length / 4}`);
 
-  let reply = gpt.data.choices[0].message.content;
-  console.log('🧾 GPT raw reply:\n', reply);
+    let reply = gpt.data.choices[0].message.content;
+    console.log('🧾 GPT raw reply:\n', reply);
 
-  // Check for update/delete requests first
-  const userMessage = text.toLowerCase();
-  const isUpdateRequest = /actually|instead|correction|meant|ate.*not|really ate|it was/i.test(userMessage);
-  const isDeleteRequest = /delete|remove|didn't eat|never ate|cancel|take off/i.test(userMessage);
+    // Check for update/delete requests first
+    const userMessage = text.toLowerCase();
+    const isUpdateRequest = /actually|instead|correction|meant|ate.*not|really ate|it was/i.test(userMessage);
+    const isDeleteRequest = /delete|remove|didn't eat|never ate|cancel|take off/i.test(userMessage);
 
-  if (isDeleteRequest) {
-    console.log('🗑️ Processing DELETE request');
-    
-    // Get the most recent meal to delete (simplified approach)
-    const { data: recentMeals, error: mealError } = await db
-      .from('meal_logs')
-      .select('*')
-      .eq('user_phone', phone)
-      .gte('created_at', today + 'T00:00:00')
-      .order('created_at', { ascending: false })
-      .limit(1);
+    // Check for daily progress request
+    const isProgressRequest = /daily progress|progress so far|show.*progress|my progress|today.*progress/i.test(userMessage);
 
-    console.log('🔍 Recent meals found:', recentMeals);
+    // Check for last meal request (but NOT if it's a delete request)
+    const isLastMealRequest = !isDeleteRequest && !isUpdateRequest && /show.*last.*meal|my last meal|recent meal|latest meal/i.test(userMessage);
 
-    if (recentMeals && recentMeals.length > 0) {
-      const mealToDelete = recentMeals[0];
-      console.log('🗑️ Deleting meal:', mealToDelete);
+    if (isProgressRequest) {
+      console.log('📊 Processing DAILY PROGRESS request');
       
-      // Delete from meal_logs
-      const { error: deleteError } = await db
-        .from('meal_logs')
-        .delete()
-        .eq('id', mealToDelete.id);
+      const personalGreeting = userFirstName ? `${userFirstName}!` : '!';
+      
+      reply = `⏳ Daily Progress:
 
-      if (deleteError) {
-        console.error('❌ Delete error:', deleteError);
-      } else {
-        console.log('✅ Meal deleted from meal_logs');
-      }
-
-      // Subtract from daily totals
-      const { error: totalsError } = await db.rpc('increment_daily_totals', {
-        p_phone: phone,
-        p_date: today,
-        p_kcal: -mealToDelete.kcal,
-        p_prot: -mealToDelete.prot,
-        p_carb: -mealToDelete.carb,
-        p_fat: -mealToDelete.fat
-      });
-
-      if (totalsError) {
-        console.error('❌ Totals update error:', totalsError);
-      } else {
-        console.log('✅ Daily totals updated');
-      }
-
-      // Update used values
-      used.kcal = Math.max(0, used.kcal - mealToDelete.kcal);
-      used.prot = Math.max(0, used.prot - mealToDelete.prot);
-      used.carb = Math.max(0, used.carb - mealToDelete.carb);
-      used.fat = Math.max(0, used.fat - mealToDelete.fat);
-
-      console.log('📊 Updated used values:', used);
-
-      // Override reply with delete confirmation
-      reply = `✅ Meal removed from today's log.
-
-⏳ Daily Progress:
 ${bars(used, goals)}
 
-Okay, that's removed. Anything else I can help with right now?`;
+There's your progress update, ${personalGreeting} How are you feeling about reaching your targets today?`;
       
-      console.log('✅ Meal deleted and totals updated.');
-    } else {
-      console.log('❌ No recent meals found to delete');
-      reply = "I couldn't find any recent meals to delete. Could you try logging a meal first?";
-    }
-  } else if (isUpdateRequest) {
-    console.log('🔄 Processing UPDATE request');
-    
-    const flat = reply.replace(/\n/g, ' ');
-    const macroRegex = /Calories[^\d]*(\d+)[^]*?Proteins[^\d]*(\d+)[^]*?Carbs[^\d]*(\d+)[^]*?Fats[^\d]*(\d+)/i;
-    const match = flat.match(macroRegex);
-    
-    if (match) {
-      const [_, kcal, prot, carb, fat] = match.map(Number);
-      console.log('🔄 New macros:', { kcal, prot, carb, fat });
+      console.log('✅ Daily progress displayed');
+    } else if (isLastMealRequest) {
+      console.log('🍽️ Processing LAST MEAL request');
       
-      // Get the most recent meal to update
+      // Get the most recent meal
       const { data: recentMeals, error: mealError } = await db
         .from('meal_logs')
         .select('*')
@@ -554,98 +506,267 @@ Okay, that's removed. Anything else I can help with right now?`;
         .order('created_at', { ascending: false })
         .limit(1);
 
-      console.log('🔍 Recent meals for update:', recentMeals);
+      console.log('🔍 Recent meals found for display:', recentMeals);
 
       if (recentMeals && recentMeals.length > 0) {
-        const oldMeal = recentMeals[0];
-        console.log('📝 Old meal to update:', oldMeal);
+        const lastMeal = recentMeals[0];
+        console.log('🍽️ Last meal to display:', lastMeal);
         
-        // Update the meal_logs entry
-        const { error: updateError } = await db
-          .from('meal_logs')
-          .update({ 
-            kcal: kcal, 
-            prot: prot, 
-            carb: carb, 
-            fat: fat, 
-            created_at: new Date() 
-          })
-          .eq('id', oldMeal.id);
-
-        if (updateError) {
-          console.error('❌ Update error:', updateError);
-        } else {
-          console.log('✅ Meal updated in database');
-        }
-
-        // Calculate the difference and update daily totals
-        const kcalDiff = kcal - oldMeal.kcal;
-        const protDiff = prot - oldMeal.prot;
-        const carbDiff = carb - oldMeal.carb;
-        const fatDiff = fat - oldMeal.fat;
-
-        console.log('📊 Differences:', { kcalDiff, protDiff, carbDiff, fatDiff });
-
-        const { error: totalsError } = await db.rpc('increment_daily_totals', {
-          p_phone: phone,
-          p_date: today,
-          p_kcal: kcalDiff,
-          p_prot: protDiff,
-          p_carb: carbDiff,
-          p_fat: fatDiff
-        });
-
-        if (totalsError) {
-          console.error('❌ Totals update error:', totalsError);
-        } else {
-          console.log('✅ Daily totals updated with differences');
-        }
-
-        // Update used values
-        used.kcal += kcalDiff;
-        used.prot += protDiff;
-        used.carb += carbDiff;
-        used.fat += fatDiff;
-
-        console.log('📊 Updated used values:', used);
-
-        // Modify reply to show "updated" instead of "logged"
-        reply = reply.replace('✅ *Meal logged successfully!*', '✅ *Meal updated successfully!*');
-        reply = reply.replace('Meal logged successfully!', 'Meal updated successfully!');
+        const personalGreeting = userFirstName ? `${userFirstName}, ` : '';
         
-        console.log('✅ Meal updated and totals adjusted.');
+        // Create a simple meal description based on time
+        const mealTime = new Date(lastMeal.created_at);
+        const hour = mealTime.getHours();
+        let mealType = 'Meal';
+        
+        if (hour >= 6 && hour < 11) {
+          mealType = 'Breakfast';
+        } else if (hour >= 11 && hour < 16) {
+          mealType = 'Lunch';
+        } else if (hour >= 16 && hour < 21) {
+          mealType = 'Dinner';
+        } else {
+          mealType = 'Snack';
+        }
+        
+        // Get meal description or fallback
+        const mealDescription = lastMeal.meal_description || 'meal';
+        const mealDisplay = `*${mealType}: ${mealDescription}*`;
+        
+        reply = `Okay, ${personalGreeting}your last logged meal was for ${mealDisplay}. 
+        
+Here are the details:
+
+🔥 Calories: ${lastMeal.kcal} kcal
+🥩 Proteins: ${lastMeal.prot} g
+🥔 Carbs: ${lastMeal.carb} g
+🧈 Fats: ${lastMeal.fat} g
+
+Let me know if you want to log another meal or if you need anything else! 😊`;
+        
+        console.log('✅ Last meal displayed');
       } else {
-        console.log('❌ No recent meals found to update');
+        console.log('❌ No meals found for today');
+        const personalGreeting = userFirstName ? `${userFirstName}, ` : '';
+        reply = `${personalGreeting}you haven't logged any meals today yet. Start by sending me a photo or description of what you're eating!`;
+      }
+    } else if (isDeleteRequest) {
+      console.log('🗑️ Processing DELETE request - BYPASSING GPT');
+      
+      // Get the most recent meal to delete (simplified approach)
+      const { data: recentMeals, error: mealError } = await db
+        .from('meal_logs')
+        .select('*')
+        .eq('user_phone', phone)
+        .gte('created_at', today + 'T00:00:00')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      console.log('🔍 Recent meals found:', recentMeals);
+
+      if (recentMeals && recentMeals.length > 0) {
+        const mealToDelete = recentMeals[0];
+        console.log('🗑️ Deleting meal:', mealToDelete);
+        
+        // Delete from meal_logs
+        const { error: deleteError } = await db
+          .from('meal_logs')
+          .delete()
+          .eq('id', mealToDelete.id);
+
+        if (deleteError) {
+          console.error('❌ Delete error:', deleteError);
+          reply = "Sorry, I had trouble deleting that meal. Please try again.";
+        } else {
+          console.log('✅ Meal deleted from meal_logs');
+          
+          // Subtract from daily totals
+          const { error: totalsError } = await db.rpc('increment_daily_totals', {
+            p_phone: phone,
+            p_date: today,
+            p_kcal: -mealToDelete.kcal,
+            p_prot: -mealToDelete.prot,
+            p_carb: -mealToDelete.carb,
+            p_fat: -mealToDelete.fat
+          });
+
+          if (totalsError) {
+            console.error('❌ Totals update error:', totalsError);
+          } else {
+            console.log('✅ Daily totals updated');
+          }
+
+          // Update used values
+          used.kcal = Math.max(0, used.kcal - mealToDelete.kcal);
+          used.prot = Math.max(0, used.prot - mealToDelete.prot);
+          used.carb = Math.max(0, used.carb - mealToDelete.carb);
+          used.fat = Math.max(0, used.fat - mealToDelete.fat);
+
+          console.log('📊 Updated used values:', used);
+
+          const personalGreeting = userFirstName ? `, ${userFirstName}` : '';
+
+          // Override reply with delete confirmation
+          reply = `✅ *Meal removed from today's log successfully.*
+
+⏳ *Daily Progress*:
+${bars(used, goals)}
+
+Anything else I can help you with${personalGreeting}?`;
+        }
+        
+        console.log('✅ Meal deleted and totals updated.');
+      } else {
+        console.log('❌ No recent meals found to delete');
+        const personalGreeting = userFirstName ? `${userFirstName}, ` : '';
+        reply = `${personalGreeting}I couldn't find any recent meals to delete today. Would you like to log a meal first?`;
+      }
+    } else if (isUpdateRequest) {
+      console.log('🔄 Processing UPDATE request');
+      
+      const flat = reply.replace(/\n/g, ' ');
+      const macroRegex = /Calories[^\d]*(\d+)[^]*?Proteins[^\d]*(\d+)[^]*?Carbs[^\d]*(\d+)[^]*?Fats[^\d]*(\d+)/i;
+      const match = flat.match(macroRegex);
+      
+      if (match) {
+        const [_, kcal, prot, carb, fat] = match.map(Number);
+        console.log('🔄 New macros:', { kcal, prot, carb, fat });
+        
+        // Get the most recent meal to update
+        const { data: recentMeals, error: mealError } = await db
+          .from('meal_logs')
+          .select('*')
+          .eq('user_phone', phone)
+          .gte('created_at', today + 'T00:00:00')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        console.log('🔍 Recent meals for update:', recentMeals);
+
+        if (recentMeals && recentMeals.length > 0) {
+          const oldMeal = recentMeals[0];
+          console.log('🔍 Old meal to update:', oldMeal);
+          
+          // Update the meal_logs entry
+          const { error: updateError } = await db
+            .from('meal_logs')
+            .update({ 
+              kcal: kcal, 
+              prot: prot, 
+              carb: carb, 
+              fat: fat, 
+              created_at: new Date() 
+            })
+            .eq('id', oldMeal.id);
+
+          if (updateError) {
+            console.error('❌ Update error:', updateError);
+          } else {
+            console.log('✅ Meal updated in database');
+          }
+
+          // Calculate the difference and update daily totals
+          const kcalDiff = kcal - oldMeal.kcal;
+          const protDiff = prot - oldMeal.prot;
+          const carbDiff = carb - oldMeal.carb;
+          const fatDiff = fat - oldMeal.fat;
+
+          console.log('📊 Differences:', { kcalDiff, protDiff, carbDiff, fatDiff });
+
+          const { error: totalsError } = await db.rpc('increment_daily_totals', {
+            p_phone: phone,
+            p_date: today,
+            p_kcal: kcalDiff,
+            p_prot: protDiff,
+            p_carb: carbDiff,
+            p_fat: fatDiff
+          });
+
+          if (totalsError) {
+            console.error('❌ Totals update error:', totalsError);
+          } else {
+            console.log('✅ Daily totals updated with differences');
+          }
+
+          // Update used values
+          used.kcal += kcalDiff;
+          used.prot += protDiff;
+          used.carb += carbDiff;
+          used.fat += fatDiff;
+
+          console.log('📊 Updated used values:', used);
+
+          // Modify reply to show "updated" instead of "logged"
+          reply = reply.replace('✅ *Meal logged successfully!*', '✅ *Meal updated successfully!*');
+          reply = reply.replace('Meal logged successfully!', 'Meal updated successfully!');
+          
+          // Fix the progress bars template literal for updates
+          reply = reply.replace(/\$\{(progress_bars|bars)\}/g, bars(used, goals));
+          
+          console.log('✅ Meal updated and totals adjusted.');
+        } else {
+          console.log('❌ No recent meals found to update');
+        }
+      } else {
+        console.log('❌ No macros found in GPT response for update');
       }
     } else {
-      console.log('❌ No macros found in GPT response for update');
-    }
-  } else {
-    // Regular new meal logging
-    const flat = reply.replace(/\n/g, ' ');
-    const macroRegex = /Calories[^\d]*(\d+)[^]*?Proteins[^\d]*(\d+)[^]*?Carbs[^\d]*(\d+)[^]*?Fats[^\d]*(\d+)/i;
-    const match = flat.match(macroRegex);
-    console.log('🔍 Regex match:', match);
+      // Regular new meal logging
+      const flat = reply.replace(/\n/g, ' ');
+      const macroRegex = /Calories[^\d]*(\d+)[^]*?Proteins[^\d]*(\d+)[^]*?Carbs[^\d]*(\d+)[^]*?Fats[^\d]*(\d+)/i;
+      const match = flat.match(macroRegex);
+      console.log('🔍 Regex match:', match);
 
-    if (match) {
-      const [_, kcal, prot, carb, fat] = match.map(Number);
-      await db.from('meal_logs').insert({ user_phone: phone, kcal, prot, carb, fat, created_at: new Date() });
-      await db.rpc('increment_daily_totals', {
-        p_phone: phone,
-        p_date: today,
-        p_kcal: kcal,
-        p_prot: prot,
-        p_carb: carb,
-        p_fat: fat
-      });
-      used.kcal += kcal; used.prot += prot; used.carb += carb; used.fat += fat;
-      console.log('✅ Meal and totals updated.');
-    } else {
-      console.warn('⚠️ Could not extract macros.');
+      if (match) {
+        const [_, kcal, prot, carb, fat] = match.map(Number);
+        
+        // Extract meal description from GPT response
+        let mealDescription = 'meal';
+        const mealLabelMatch = reply.match(/🍽️\s*\*([^:]+):\*\s*([^*\n]+)/i);
+        if (mealLabelMatch) {
+          mealDescription = mealLabelMatch[2].trim();
+        } else {
+          // Fallback: try to extract from brief label line
+          const briefLabelMatch = reply.match(/🍽️\s*\*[^:]*:\*\s*([^\n]+)/i);
+          if (briefLabelMatch) {
+            mealDescription = briefLabelMatch[1].trim();
+          } else {
+            // Last resort: use original user input
+            mealDescription = text.substring(0, 50);
+          }
+        }
+        
+        console.log('🏷️ Extracted meal description:', mealDescription);
+        
+        await db.from('meal_logs').insert({ 
+          user_phone: phone, 
+          kcal, 
+          prot, 
+          carb, 
+          fat, 
+          meal_description: mealDescription,
+          created_at: new Date() 
+        });
+        await db.rpc('increment_daily_totals', {
+          p_phone: phone,
+          p_date: today,
+          p_kcal: kcal,
+          p_prot: prot,
+          p_carb: carb,
+          p_fat: fat
+        });
+        used.kcal += kcal; used.prot += prot; used.carb += carb; used.fat += fat;
+        console.log('✅ Meal and totals updated.');
+      } else {
+        console.warn('⚠️ Could not extract macros.');
+      }
     }
-  }
 
-    reply = reply.replace(/\$\{(progress_bars|bars)\}/g, bars(used, goals));
+    // Only replace bars and send response if we haven't already handled a special request
+    if (!isProgressRequest && !isLastMealRequest && !isDeleteRequest && !isUpdateRequest) {
+      reply = reply.replace(/\$\{(progress_bars|bars)\}/g, bars(used, goals));
+    }
+    
     twiml.message(reply);
     console.log('💬 Final reply sent.');
     res.type('text/xml').send(twiml.toString());
@@ -709,7 +830,7 @@ app.post('/process-recording', (req, res) => {
   const recordingSid = req.body.RecordingSid;
   
   console.log('🔗 Recording URL:', recordingUrl);
-  console.log('📁 Recording SID:', recordingSid);
+  console.log('🔍 Recording SID:', recordingSid);
   console.log('👆 You can listen to this recording to hear Facebook\'s verification code');
   
   // End the call
@@ -747,8 +868,6 @@ app.post('/transcription-complete', (req, res) => {
   
   res.status(200).send('OK');
 });
-
-
 
 // ============================================================================
 // TEST VERSION OF COMPLETE USER SETUP (for Postman testing)
@@ -859,13 +978,12 @@ app.post('/complete-user-setup-test', async (req, res) => {
   }
 });
 
-
 // ============================================================================
 // COMPLETE USER SETUP ROUTE - FIXED VERSION
 // ============================================================================
 
 app.post('/complete-user-setup', async (req, res) => {
-  console.log('🔄 Complete user setup - REQUEST RECEIVED');
+  console.log('📄 Complete user setup - REQUEST RECEIVED');
   
   try {
     const { checkoutKey, sessionId, stripeData, userData } = req.body;
@@ -962,7 +1080,7 @@ app.post('/complete-user-setup', async (req, res) => {
     // STEP 2: Handle missing phone scenario
     if (!finalPhoneNumber) {
       console.log('⚠️ WARNING: No phone number found in Stripe or userData');
-      console.log('📧 Will use email-based identifier instead');
+      console.log('🔧 Will use email-based identifier instead');
       
       // Create a temporary identifier using email or stripe customer ID
       if (finalEmail) {
@@ -1262,13 +1380,12 @@ app.post('/create-checkout-session', async (req, res) => {
   }
 });
 
-
 // ============================================================================
 // STRIPE WEBHOOK
 // ============================================================================
 
 app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  console.log('🔔 Stripe webhook received');
+  console.log('📞 Stripe webhook received');
   
   try {
     const event = req.body;
@@ -1318,7 +1435,7 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
 // ============================================================================
 
 app.post('/proxy-setup', async (req, res) => {
-  console.log('🔄 Proxy endpoint hit');
+  console.log('📄 Proxy endpoint hit');
   
   // Manually set CORS for this specific endpoint
   const origin = req.headers.origin || '*';
@@ -1401,18 +1518,18 @@ app.get('/security-dashboard', (req, res) => {
   for (const [phone, attempts] of unauthorizedAttempts) {
     const readableAttempts = attempts.map(timestamp => new Date(timestamp).toISOString());
   
-  if (attempts.length > 5) {
-    summary.high_risk_numbers.push({
-      phone,
-      attempts: attempts.length,
-      attempt_times: readableAttempts,
-      last_attempt: new Date(Math.max(...attempts)).toISOString()
-    });
+    if (attempts.length > 5) {
+      summary.high_risk_numbers.push({
+        phone,
+        attempts: attempts.length,
+        attempt_times: readableAttempts,
+        last_attempt: new Date(Math.max(...attempts)).toISOString()
+      });
+    }
+    
+    // Add all attempts with readable timestamps
+    summary.unauthorized_attempts[phone] = readableAttempts;
   }
-  
-  // Add all attempts with readable timestamps
-  summary.unauthorized_attempts[phone] = readableAttempts;
-}
   
   res.json(summary);
 });
@@ -1440,6 +1557,7 @@ const PORT = parseInt(process.env.PORT) || 8080;
 const server = require('http').createServer(app).listen(PORT, '0.0.0.0', () => {
   server.keepAliveTimeout = 120000; // 2 minutes
   server.headersTimeout = 120000; // 2 minutes
+  server.headersTimeout = 120000; // 2 minutes
   console.log(`🚀 IQCalorie bot running on port ${PORT}`);
   console.log(`✅ Server is ready to accept connections`);
 });
@@ -1447,8 +1565,6 @@ const server = require('http').createServer(app).listen(PORT, '0.0.0.0', () => {
 server.on('error', (err) => {
   console.error('❌ Server error:', err);
 });
-
-
 
 process.on('uncaughtException', (err) => {
   console.error('💥 UNCAUGHT EXCEPTION:', err);
