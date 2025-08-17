@@ -477,10 +477,10 @@ app.post('/webhook', async (req, res) => {
     const isDeleteRequest = /delete|remove|didn't eat|never ate|cancel|take off/i.test(userMessage);
 
     // Check for daily progress request
-    const isProgressRequest = /daily progress|progress so far|show.*progress|my progress|today.*progress/i.test(userMessage);
+    const isProgressRequest = /^progress$|daily progress|progress so far|show.*progress|my progress|today.*progress/i.test(userMessage);
 
     // Check for last meal request (but NOT if it's a delete request)
-    const isLastMealRequest = !isDeleteRequest && !isUpdateRequest && /show.*last.*meal|my last meal|recent meal|latest meal/i.test(userMessage);
+    const isLastMealRequest = !isDeleteRequest && !isUpdateRequest && /^last meal$|^latest meal$|^recent meal$|^previous meal$|show.*last.*meal|my last meal|my recent meal|my latest meal|my previous meal/i.test(userMessage);
 
     if (isProgressRequest) {
       console.log('📊 Processing DAILY PROGRESS request');
