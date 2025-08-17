@@ -10,6 +10,47 @@ const { MessagingResponse } = require('twilio').twiml;
 const { createClient } = require('@supabase/supabase-js');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
+// ============================================================================
+// DAILY RESET SCHEDULER
+// ============================================================================
+
+const cron = require('node-cron');
+
+// Schedule daily reset at midnight (00:00) every day
+cron.schedule('0 0 * * *', async () => {
+  console.log('🕛 DAILY RESET: Starting midnight reset at', new Date().toISOString());
+  
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    
+    // Reset all users' daily totals to zero
+    const { data, error } = await db
+      .from('daily_totals')
+      .update({
+        kcal: 0,
+        prot: 0,
+        carb: 0,
+        fat: 0,
+      })
+      .eq('date', today)
+      .select('user_phone');
+    
+    if (error) {
+      console.error('❌ Daily reset error:', error);
+    } else {
+      const resetCount = data ? data.length : 0;
+      console.log(`✅ DAILY RESET: Successfully reset ${resetCount} users' daily totals`);
+    }
+    
+  } catch (err) {
+    console.error('❌ Daily reset failed:', err);
+  }
+}, {
+  timezone: "Asia/Beirut"
+});
+
+console.log('⏰ Daily reset scheduler initialized - will run at midnight UTC');
+
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -298,6 +339,45 @@ function trackUnauthorizedAttempt(phone) {
   
   return recentAttempts.length;
 }
+
+// Manual daily reset endpoint for testing
+app.post('/manual-reset', async (req, res) => {
+  console.log('🔧 MANUAL RESET: Triggered at', new Date().toISOString());
+  
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    
+    // Reset all users' daily totals to zero
+    const { data, error } = await db
+      .from('daily_totals')
+      .update({
+        kcal: 0,
+        prot: 0,
+        carb: 0,
+        fat: 0,
+      })
+      .eq('date', today)
+      .select('user_phone');
+    
+    if (error) {
+      console.error('❌ Manual reset error:', error);
+      return res.status(500).json({ error: 'Reset failed', details: error.message });
+    }
+    
+    const resetCount = data ? data.length : 0;
+    console.log(`✅ MANUAL RESET: Successfully reset ${resetCount} users' daily totals`);
+    
+    res.json({ 
+      success: true, 
+      message: `Successfully reset ${resetCount} users' daily totals`,
+      resetAt: new Date().toISOString()
+    });
+    
+  } catch (err) {
+    console.error('❌ Manual reset failed:', err);
+    res.status(500).json({ error: 'Reset failed', details: err.message });
+  }
+});
 
 // ============================================================================
 // WHATSAPP WEBHOOK
