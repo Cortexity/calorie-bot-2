@@ -487,8 +487,7 @@ app.post('/webhook', async (req, res) => {
       
       const personalGreeting = userFirstName ? `${userFirstName}!` : '!';
       
-      reply = `⏳ Daily Progress:
-
+      reply = `⏳ *Daily Progress:*
 ${bars(used, goals)}
 
 There's your progress update, ${personalGreeting} How are you feeling about reaching your targets today?`;
@@ -537,10 +536,10 @@ There's your progress update, ${personalGreeting} How are you feeling about reac
         
 Here are the details:
 
-🔥 Calories: ${lastMeal.kcal} kcal
-🥩 Proteins: ${lastMeal.prot} g
-🥔 Carbs: ${lastMeal.carb} g
-🧈 Fats: ${lastMeal.fat} g
+🔥 *Calories:* ${lastMeal.kcal} kcal
+🥩 *Proteins:* ${lastMeal.prot} g
+🥔 *Carbs:* ${lastMeal.carb} g
+🧈 *Fats:* ${lastMeal.fat} g
 
 Let me know if you want to log another meal or if you need anything else! 😊`;
         
@@ -747,7 +746,10 @@ Anything else I can help you with${personalGreeting}?`;
           meal_description: mealDescription,
           created_at: new Date() 
         });
-        await db.rpc('increment_daily_totals', {
+        console.log('🔍 BEFORE increment_daily_totals:', { kcal, prot, carb, fat });
+        console.log('🔍 Current used values BEFORE:', used);
+        
+        const { error: totalsError } = await db.rpc('increment_daily_totals', {
           p_phone: phone,
           p_date: today,
           p_kcal: kcal,
@@ -755,7 +757,25 @@ Anything else I can help you with${personalGreeting}?`;
           p_carb: carb,
           p_fat: fat
         });
+        
+        if (totalsError) {
+          console.error('❌ Totals update error:', totalsError);
+        }
+        
         used.kcal += kcal; used.prot += prot; used.carb += carb; used.fat += fat;
+        console.log('🔍 Local used values AFTER update:', used);
+        
+        // Verify what's actually in the database
+        const { data: verifyData } = await db.rpc('get_user_data', { p_phone: phone, p_date: today });
+        if (verifyData && verifyData[0]) {
+          console.log('🔍 DATABASE used values after update:', {
+            kcal: verifyData[0].kcal_used,
+            prot: verifyData[0].prot_used,
+            carb: verifyData[0].carb_used,
+            fat: verifyData[0].fat_used
+          });
+        }
+        
         console.log('✅ Meal and totals updated.');
       } else {
         console.warn('⚠️ Could not extract macros.');
