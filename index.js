@@ -1045,6 +1045,7 @@ app.post('/complete-user-setup-test', async (req, res) => {
       email: finalEmail,
       stripe_customer_id: stripeCustomerId,
       stripe_subscription_id: stripeSubscriptionId,
+      // User profile data from onboarding (using existing columns + 6 new ones)
       gender: userData?.gender || 'male',
       age: userData?.age || 25,
       height_cm: userData?.height_cm || 175,
@@ -1054,6 +1055,16 @@ app.post('/complete-user-setup-test', async (req, res) => {
       prot_goal: userData?.prot_goal || 150,
       carb_goal: userData?.carb_goal || 200,
       fat_goal: userData?.fat_goal || 67,
+
+      // ONLY the 6 truly missing fields
+      target_weight_kg: userData?.target_weight_kg || null,
+      fitness_goal: userData?.fitness_goal || null,
+      measurement_system: userData?.measurement_system || null,
+      diet_preference: userData?.diet_preference || null,
+      diet_preference_custom: userData?.diet_preference_custom || null,
+      weekly_weight_goal: userData?.weekly_weight_goal || null,
+
+      // Timestamp
       created_at: new Date().toISOString()
     };
     
@@ -1107,6 +1118,13 @@ app.post('/complete-user-setup', async (req, res) => {
     console.log('  - checkoutKey:', checkoutKey);
     console.log('  - sessionId:', sessionId);
     console.log('  - userData:', userData);
+    console.log('🔍 NEW FIELDS DEBUG:');
+    console.log('  - target_weight_kg:', userData?.target_weight_kg);
+    console.log('  - fitness_goal:', userData?.fitness_goal);
+    console.log('  - measurement_system:', userData?.measurement_system);
+    console.log('  - diet_preference:', userData?.diet_preference);
+    console.log('  - diet_preference_custom:', userData?.diet_preference_custom);
+    console.log('  - weekly_weight_goal:', userData?.weekly_weight_goal);
     
     if (!sessionId || sessionId === 'unknown') {
       return res.status(400).json({ 
@@ -1238,6 +1256,14 @@ app.post('/complete-user-setup', async (req, res) => {
       prot_goal: userData?.prot_goal || 150,
       carb_goal: userData?.carb_goal || 200,
       fat_goal: userData?.fat_goal || 67,
+
+      // NEW FIELDS - Add the 6 missing columns
+      target_weight_kg: userData?.target_weight_kg || null,
+      fitness_goal: userData?.fitness_goal || null,
+      measurement_system: userData?.measurement_system || null,
+      diet_preference: userData?.diet_preference || null,
+      diet_preference_custom: userData?.diet_preference_custom || null,
+      weekly_weight_goal: userData?.weekly_weight_goal || null,
       
       // Timestamp
       created_at: new Date().toISOString()
@@ -1677,7 +1703,7 @@ const server = require('http').createServer(app).listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server is ready to accept connections`);
 });
 
-server.on('error', (err) => {
+server.on('error', (err) => {f
   console.error('❌ Server error:', err);
 });
 

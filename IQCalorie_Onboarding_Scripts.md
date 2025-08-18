@@ -2460,9 +2460,6 @@ if (fitnessGoal === 'maintain_build') {
 <!-- COMPLETE CHOOSE YOUR PLAN FOOTER SCRIPT -->
 <!-- PART 1: Your existing code (KEEP AS-IS) -->
 
-<!-- COMPLETE CHOOSE YOUR PLAN FOOTER SCRIPT -->
-<!-- PART 1: Your existing code (KEEP AS-IS) -->
-
 <script>
 // Choose Your Plan Page - Smooth Transition Logic
 
@@ -2762,7 +2759,9 @@ window.manualTest = manualTest;
             const supabaseData = {
                 // Basic info (matching your exact table structure)
                 phone_number: null, // Will be collected later or left null
-                gender: rawData.gender || 'male',
+                first_name: null, // Will be collected from Stripe
+                last_name: null, // Will be collected from Stripe
+              	gender: rawData.gender || 'male',
                 age: parseInt(rawData.age) || 25,
                 
                 // Physical measurements (converted to metric, rounded to integers for smallint)
