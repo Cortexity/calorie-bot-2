@@ -1313,6 +1313,8 @@ app.post('/complete-user-setup', async (req, res) => {
   }
 });
 
+
+
 // ============================================================================
 // TRIGGER WHATSAPP WELCOME MESSAGE
 // ============================================================================
@@ -1375,16 +1377,20 @@ app.post('/trigger-welcome', async (req, res) => {
     if (fitnessGoal === 'lose_weight') actualTDEE = actualCalories + 300;
     else if (fitnessGoal === 'gain_weight') actualTDEE = actualCalories - 300;
     
-    // Get user's first name for personalization
+        // Get user's first name and diet preference for personalization
     const { data: userRecord, error: userError } = await db
-      .from('users')
-      .select('first_name, last_name')
-      .eq('phone_number', formattedPhone)
-      .limit(1);
-    
+    .from('users')
+    .select('first_name, last_name, diet_preference')
+    .eq('phone_number', formattedPhone)
+    .limit(1);
+
     const firstName = userRecord && userRecord[0] && userRecord[0].first_name 
-      ? userRecord[0].first_name 
-      : '';
+          ? userRecord[0].first_name 
+          : '';
+
+    const dietPreference = userRecord && userRecord[0] && userRecord[0].diet_preference 
+    ? userRecord[0].diet_preference 
+    : null;
     
     const personalGreeting = firstName 
       ? `Welcome to *IQCalorie*, ${firstName}! 🔥` 
@@ -1410,6 +1416,7 @@ You can start texting me now! 💪✅
 🔥 TDEE: *${actualTDEE} calories*
 ⚖️ Current Weight: *${actualWeight}kg*
 🎯 Goal: ${goalText}
+${dietPreference ? `🍽️ Diet: ${dietPreference}` : ''}
 
 ⚖️ ${motivationText}
 
