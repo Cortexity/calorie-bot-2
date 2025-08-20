@@ -1313,6 +1313,168 @@ app.post('/complete-user-setup', async (req, res) => {
   }
 });
 
+// ============================================================================
+// DASHBOARD API ENDPOINTS
+// ============================================================================
+
+// Get user profile data for dashboard
+app.get('/api/user/:phone', async (req, res) => {
+  console.log('📊 Dashboard: Getting user profile data');
+  
+  try {
+    const phoneNumber = req.params.phone;
+    console.log('📱 Looking up user:', phoneNumber);
+    
+    // Get user data from Supabase
+    const { data, error } = await db
+      .from('users')
+      .select('*')
+      .eq('phone_number', phoneNumber)
+      .single();
+    
+    if (error || !data) {
+      console.error('❌ User not found:', error);
+      return res.status(404).json({ 
+        error: 'User not found',
+        details: error?.message 
+      });
+    }
+    
+    console.log('✅ User data retrieved successfully');
+    res.json({ 
+      success: true, 
+      user: data 
+    });
+    
+  } catch (error) {
+    console.error('❌ Dashboard API error:', error);
+    res.status(500).json({ 
+      error: 'Failed to retrieve user data',
+      details: error.message 
+    });
+  }
+});
+
+// Update user profile data (excluding phone number)
+app.put('/api/user/:phone', async (req, res) => {
+  console.log('📝 Dashboard: Updating user profile');
+  
+  try {
+    const phoneNumber = req.params.phone;
+    const updatedData = req.body;
+    
+    // Remove phone_number from update data to prevent changes
+    delete updatedData.phone_number;
+    delete updatedData.created_at;
+    delete updatedData.id;
+    
+    console.log('📱 Updating user:', phoneNumber);
+    console.log('📝 Update data:', updatedData);
+    
+    // Update user in Supabase
+    const { data, error } = await db
+      .from('users')
+      .update(updatedData)
+      .eq('phone_number', phoneNumber)
+      .select();
+    
+    if (error) {
+      console.error('❌ Update failed:', error);
+      return res.status(500).json({ 
+        error: 'Failed to update user data',
+        details: error.message 
+      });
+    }
+    
+    if (!data || data.length === 0) {
+      return res.status(404).json({ 
+        error: 'User not found' 
+      });
+    }
+    
+    console.log('✅ User updated successfully');
+    res.json({ 
+      success: true, 
+      message: 'Profile updated successfully',
+      user: data[0] 
+    });
+    
+  } catch (error) {
+    console.error('❌ Dashboard update error:', error);
+    res.status(500).json({ 
+      error: 'Failed to update user data',
+      details: error.message 
+    });
+  }
+});
+
+// Generate Stripe billing portal URL - IMPROVED VERSION
+app.post('/api/billing-portal', async (req, res) => {
+  console.log('💳 Dashboard: Creating billing portal session');
+  
+  try {
+    const { phone_number } = req.body;
+    
+    // Get user's Stripe customer ID
+    const { data: userData, error } = await db
+      .from('users')
+      .select('stripe_customer_id, email, first_name, last_name')
+      .eq('phone_number', phone_number)
+      .single();
+    
+    if (error || !userData || !userData.stripe_customer_id) {
+      console.error('❌ User or customer ID not found:', error);
+      return res.status(404).json({ 
+        error: 'Customer not found' 
+      });
+    }
+    
+    // For test mode, create a simple portal configuration
+    try {
+      // Create Stripe billing portal session with minimal config
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer: userData.stripe_customer_id,
+        return_url: `${process.env.FRONTEND_URL || 'https://your-clickfunnels-dashboard.com'}/dashboard?success=billing`,
+      });
+      
+      console.log('✅ Billing portal created:', portalSession.url);
+      res.json({ 
+        success: true, 
+        url: portalSession.url,
+        customer_info: {
+          email: userData.email,
+          name: `${userData.first_name} ${userData.last_name}`
+        }
+      });
+      
+    } catch (stripeError) {
+      console.error('❌ Stripe billing portal error:', stripeError);
+      
+      // If billing portal isn't configured, return a helpful error
+      if (stripeError.code === 'account_invalid') {
+        return res.json({
+          success: false,
+          error: 'billing_portal_not_configured',
+          message: 'Billing portal needs to be configured in Stripe Dashboard',
+          stripe_dashboard_url: 'https://dashboard.stripe.com/settings/billing/portal',
+          temp_solution: {
+            customer_portal_url: `https://dashboard.stripe.com/customers/${userData.stripe_customer_id}`,
+            instructions: 'Use Stripe Dashboard to manage subscription for now'
+          }
+        });
+      }
+      
+      throw stripeError;
+    }
+    
+  } catch (error) {
+    console.error('❌ Billing portal error:', error);
+    res.status(500).json({ 
+      error: 'Failed to create billing portal',
+      details: error.message 
+    });
+  }
+});
 
 
 // ============================================================================
