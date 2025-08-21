@@ -466,6 +466,93 @@ app.post('/webhook', async (req, res) => {
       text = wr.data.text;
     }
 
+    // ============================================================================
+    // COMMAND DETECTION - Handle WhatsApp commands before OpenAI processing
+    // ============================================================================
+    
+    if (text && text.startsWith('/')) {
+      const command = text.toLowerCase().trim();
+      
+      if (command === '/' || command === '/help') {
+        // Show command menu when user types just "/"
+        twiml.message(`Available commands:
+
+- */dashboard* - Get your personal dashboard link  
+- */support* - Get support contact information
+
+Just type any command to use it!`);
+        return res.type('text/xml').send(twiml.toString());
+      }
+      
+      else if (command === '/dashboard') {
+        console.log('🔗 Dashboard command received from:', phone);
+        
+        try {
+          // Generate dashboard link
+          const dashboardResponse = await axios.post(`${process.env.BASE_URL || 'http://localhost:8080'}/api/generate-dashboard-link`, {
+            phone_number: phone
+          });
+                                                                                                 
+          const { dashboard_url, user_name } = dashboardResponse.data;
+          
+          const dashboardMessage = `Hi ${user_name || 'there'}! 👋
+
+🔗 Access your personal dashboard here:
+${dashboard_url}
+
+From your dashboard you can:
+- Update your profile information
+- Adjust your calorie and macro goals  
+- Manage your subscription
+- View your account details
+
+This link is personalized for your account. Keep it secure!`;
+
+          twiml.message(dashboardMessage);
+          return res.type('text/xml').send(twiml.toString());
+          
+        } catch (error) {
+          console.error('❌ Error generating dashboard link:', error);
+          twiml.message('Sorry, I had trouble generating your dashboard link. Please try again later or contact support.');
+          return res.type('text/xml').send(twiml.toString());
+        }
+      }
+      
+      else if (command === '/support') {
+        console.log('📞 Support command received from:', phone);
+        
+        try {
+          const supportResponse = await axios.get(`${process.env.BASE_URL || 'http://localhost:8080'}/api/support-info`);
+          const { support_message, support_phone, support_hours } = supportResponse.data;
+          
+          const supportMessage = `${support_message}
+
+📲💬 WhatsaApp Only: ${support_phone}
+🕒 ${support_hours}
+`;
+
+          twiml.message(supportMessage);
+          return res.type('text/xml').send(twiml.toString());
+          
+        } catch (error) {
+          console.error('❌ Error getting support info:', error);
+          twiml.message('📞 Need help? Contact our support team at +1234567890 or reply to this chat!');
+          return res.type('text/xml').send(twiml.toString());
+        }
+      }
+      
+      else {
+        // Unknown command
+        twiml.message(`
+Available commands:
+- */dashboard* - Get your personal dashboard link
+- */support* - Get support contact information
+
+💡 Tip: Just type / to see available commands, or type any command manually!`);
+        return res.type('text/xml').send(twiml.toString());
+      }
+    }
+
     // Build conversational system prompt with personalization
     const nameContext = userFirstName 
       ? `The user's name is ${userFirstName}. Use their name naturally in greetings and when appropriate, but don't overuse it.` 
@@ -1450,17 +1537,13 @@ app.post('/api/billing-portal', async (req, res) => {
     } catch (stripeError) {
       console.error('❌ Stripe billing portal error:', stripeError);
       
-      // If billing portal isn't configured, return a helpful error
-      if (stripeError.code === 'account_invalid') {
-        return res.json({
+      // Handle billing portal not configured
+      if (stripeError.code === 'account_invalid' || stripeError.message.includes('No configuration provided')) {
+        return res.status(500).json({
           success: false,
           error: 'billing_portal_not_configured',
-          message: 'Billing portal needs to be configured in Stripe Dashboard',
-          stripe_dashboard_url: 'https://dashboard.stripe.com/settings/billing/portal',
-          temp_solution: {
-            customer_portal_url: `https://dashboard.stripe.com/customers/${userData.stripe_customer_id}`,
-            instructions: 'Use Stripe Dashboard to manage subscription for now'
-          }
+          message: 'Billing portal is not set up yet. Please contact support.',
+          setup_required: true
         });
       }
       
@@ -1474,6 +1557,70 @@ app.post('/api/billing-portal', async (req, res) => {
       details: error.message 
     });
   }
+});
+
+// ============================================================================
+// WHATSAPP COMMAND ENDPOINTS
+// ============================================================================
+
+// Generate dashboard link for user
+app.post('/api/generate-dashboard-link', async (req, res) => {
+  console.log('🔗 Generating dashboard link');
+  
+  try {
+    const { phone_number } = req.body;
+    
+    if (!phone_number) {
+      return res.status(400).json({ error: 'Phone number required' });
+    }
+    
+    console.log('🔍 Looking up user with phone:', phone_number);
+    
+    // Verify user exists in database
+    const { data: userData, error } = await db
+      .from('users')
+      .select('phone_number, first_name')
+      .eq('phone_number', phone_number)
+      .single();
+    
+    if (error || !userData) {
+      console.error('❌ User not found in database:', phone_number);
+      console.error('Database error:', error);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('✅ Found user:', userData.first_name, 'with phone:', userData.phone_number);
+    
+    // Debug: Log the phone_number variable before URL generation
+    console.log('🔍 DEBUG: phone_number variable =', phone_number);
+    console.log('🔍 DEBUG: userData.phone_number =', userData.phone_number);
+    
+    // Generate secure dashboard URL using the SAME phone number from the request
+    const dashboardUrl = `https://www.iqcalorie.com/user-dashboard?phone=${encodeURIComponent(phone_number)}`;
+    
+    console.log('🔗 Generated dashboard URL:', dashboardUrl);
+    console.log('🔍 DEBUG: URL encoded phone =', encodeURIComponent(phone_number));
+    
+    res.json({
+      success: true,
+      dashboard_url: dashboardUrl,
+      user_name: userData.first_name
+    });
+    
+  } catch (error) {
+    console.error('❌ Error generating dashboard link:', error);
+    res.status(500).json({ error: 'Failed to generate link' });
+  }
+});
+
+// Get support contact info
+app.get('/api/support-info', (req, res) => {
+  res.json({
+    success: true,
+    support_message: "Need help? Contact our support team:",
+    support_phone: "+96170464844", // Your actual support number
+    support_hours: "Available 9 AM - 6 PM Beirut time, Monday to Friday"
+  });
 });
 
 
