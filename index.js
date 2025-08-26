@@ -1838,6 +1838,223 @@ app.post('/create-checkout-session', async (req, res) => {
 });
 
 // ============================================================================
+// SUBSCRIPTION MANAGEMENT FUNCTIONS
+// ============================================================================
+
+// Handle subscription cancellation
+async function handleSubscriptionCancellation(subscription) {
+  console.log('🗑️ Processing subscription cancellation:', subscription.id);
+  
+  try {
+    // Find user by Stripe subscription ID
+    const { data: users, error: findError } = await db
+      .from('users')
+      .select('*')
+      .eq('stripe_subscription_id', subscription.id);
+    
+    if (findError || !users || users.length === 0) {
+      console.error('❌ User not found for cancelled subscription:', subscription.id);
+      return;
+    }
+    
+    const user = users[0];
+    console.log('👤 Found user to process cancellation:', user.phone_number);
+    
+    // Delete related data first, then user
+    console.log('🗑️ Deleting user data for:', user.phone_number);
+    
+    // Delete from daily_totals first
+    const { error: dailyError } = await db
+      .from('daily_totals')
+      .delete()
+      .eq('user_phone', user.phone_number);
+    
+    if (dailyError) {
+      console.error('❌ Failed to delete daily totals:', dailyError);
+    } else {
+      console.log('✅ Daily totals deleted');
+    }
+    
+    // Delete from meal_logs
+    const { error: mealError } = await db
+      .from('meal_logs')
+      .delete()
+      .eq('user_phone', user.phone_number);
+    
+    if (mealError) {
+      console.error('❌ Failed to delete meal logs:', mealError);
+    } else {
+      console.log('✅ Meal logs deleted');
+    }
+    
+    // Finally delete user
+    const { error: deleteError } = await db
+      .from('users')
+      .delete()
+      .eq('stripe_subscription_id', subscription.id);
+    
+    if (deleteError) {
+      console.error('❌ Failed to delete user:', deleteError);
+      return;
+    }
+    
+    console.log('✅ User account deleted due to subscription cancellation:', user.phone_number);
+    
+    // Optional: Send farewell message via WhatsApp
+    await sendFarewellMessage(user.phone_number, user.first_name);
+    
+  } catch (error) {
+    console.error('❌ Error handling subscription cancellation:', error);
+  }
+}
+
+// Handle trial ending (3 days before cancellation)
+async function handleTrialEnding(subscription) {
+  console.log('⏰ Processing trial ending warning:', subscription.id);
+  
+  try {
+    // Find user by Stripe subscription ID
+    console.log('🔍 Looking for user with subscription ID:', subscription.id);
+    
+    const { data: users, error } = await db
+      .from('users')
+      .select('phone_number, first_name, stripe_subscription_id')
+      .eq('stripe_subscription_id', subscription.id);
+    
+    console.log('📊 Database query result:', { users, error });
+    
+    if (error || !users || users.length === 0) {
+      console.error('❌ User not found for trial ending:', subscription.id);
+      return;
+    }
+    
+    const user = users[0];
+    console.log('👤 Sending trial ending warning to:', user.phone_number);
+    
+    // Send warning message via WhatsApp
+    await sendTrialEndingMessage(user.phone_number, user.first_name);
+    
+  } catch (error) {
+    console.error('❌ Error handling trial ending:', error);
+  }
+}
+
+// Handle payment failure
+async function handlePaymentFailure(invoice) {
+  console.log('💳 Processing payment failure for subscription:', invoice.subscription);
+  
+  try {
+    // Find user by Stripe subscription ID
+    console.log('🔍 Looking for user with subscription ID:', invoice.subscription);
+    
+    const { data: users, error } = await db
+      .from('users')
+      .select('phone_number, first_name, stripe_subscription_id')
+      .eq('stripe_subscription_id', invoice.subscription);
+    
+    console.log('📊 Database query result:', { users, error });
+    
+    if (error || !users || users.length === 0) {
+      console.error('❌ User not found for payment failure:', invoice.subscription);
+      return;
+    }
+    
+    const user = users[0];
+    console.log('👤 Sending payment failure notice to:', user.phone_number);
+    
+    // Send payment failure message via WhatsApp
+    await sendPaymentFailureMessage(user.phone_number, user.first_name);
+    
+  } catch (error) {
+    console.error('❌ Error handling payment failure:', error);
+  }
+}
+
+// Send farewell message when subscription is cancelled
+async function sendFarewellMessage(phoneNumber, firstName) {
+  try {
+    const twilio = require('twilio')(process.env.ACCOUNT_SID, process.env.AUTH_TOKEN);
+    
+    const personalGreeting = firstName ? `${firstName}, ` : '';
+    
+    const message = `Hi ${personalGreeting}we're sorry to see you go!
+
+Your IQ Calorie subscription has been cancelled and your account access has ended.
+
+If you change your mind, you can always restart your subscription at www.iqcalorie.com
+
+Thank you for trying IQ Calorie!`;
+
+    await twilio.messages.create({
+      from: 'whatsapp:+447888873477',
+      to: `whatsapp:${phoneNumber}`,
+      body: message
+    });
+    
+    console.log('✅ Farewell message sent to:', phoneNumber);
+    
+  } catch (error) {
+    console.error('❌ Error sending farewell message:', error);
+  }
+}
+
+// Send trial ending warning
+async function sendTrialEndingMessage(phoneNumber, firstName) {
+  try {
+    const twilio = require('twilio')(process.env.ACCOUNT_SID, process.env.AUTH_TOKEN);
+    
+    const personalGreeting = firstName ? `${firstName}, ` : '';
+    
+    const message = `Hi ${personalGreeting}your 3-day free trial is ending soon!
+
+To continue using IQ Calorie and keep tracking your nutrition goals, make sure your payment method is set up.
+
+Manage your subscription: Type /dashboard and click "Manage Subscription & Billing"
+
+We hope you're loving your nutrition journey with us!`;
+
+    await twilio.messages.create({
+      from: 'whatsapp:+447888873477',
+      to: `whatsapp:${phoneNumber}`,
+      body: message
+    });
+    
+    console.log('✅ Trial ending message sent to:', phoneNumber);
+    
+  } catch (error) {
+    console.error('❌ Error sending trial ending message:', error);
+  }
+}
+
+// Send payment failure notice
+async function sendPaymentFailureMessage(phoneNumber, firstName) {
+  try {
+    const twilio = require('twilio')(process.env.ACCOUNT_SID, process.env.AUTH_TOKEN);
+    
+    const personalGreeting = firstName ? `${firstName}, ` : '';
+    
+    const message = `Hi ${personalGreeting}we had trouble processing your payment for IQ Calorie.
+
+Please update your payment method to continue your subscription:
+
+Type /dashboard and click "Manage Subscription & Billing"
+
+If not resolved soon, your access may be suspended.`;
+
+    await twilio.messages.create({
+      from: 'whatsapp:+447888873477',
+      to: `whatsapp:${phoneNumber}`,
+      body: message
+    });
+    
+    console.log('✅ Payment failure message sent to:', phoneNumber);
+    
+  } catch (error) {
+    console.error('❌ Error sending payment failure message:', error);
+  }
+}
+
+// ============================================================================
 // STRIPE WEBHOOK
 // ============================================================================
 
@@ -1853,7 +2070,7 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
       
       console.log('✅ Checkout session completed');
       console.log('📋 Session ID:', session.id);
-      console.log('👤 Customer ID:', session.customer);
+      console.log('💤 Customer ID:', session.customer);
       console.log('💳 Subscription ID:', session.subscription);
       
       const successUrl = session.success_url || '';
@@ -1879,11 +2096,58 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
       }
     }
     
+    // Handle subscription cancellation
+    else if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object;
+      console.log('🗑️ Subscription cancelled:', subscription.id);
+      
+      await handleSubscriptionCancellation(subscription);
+    }
+    
+    // Handle subscription trial ending
+    else if (event.type === 'customer.subscription.trial_will_end') {
+      const subscription = event.data.object;
+      console.log('⏰ Trial ending soon:', subscription.id);
+      
+      // Optional: Send notification to user about trial ending
+      await handleTrialEnding(subscription);
+    }
+    
+    // Handle failed payments (subscription becomes past_due)
+    else if (event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object;
+      console.log('💳 Payment failed for subscription:', invoice.subscription);
+      
+      await handlePaymentFailure(invoice);
+    }
+    
     res.status(200).json({ received: true });
     
   } catch (error) {
     console.error('❌ Stripe webhook error:', error);
     res.status(400).json({ error: 'Webhook error' });
+  }
+});
+
+// Debug endpoint to test WhatsApp messages
+app.post('/test-whatsapp', async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+    
+    const twilio = require('twilio')(process.env.ACCOUNT_SID, process.env.AUTH_TOKEN);
+    
+    const result = await twilio.messages.create({
+      from: 'whatsapp:+447888873477',
+      to: `whatsapp:${phone}`,
+      body: message || 'Test message from backend'
+    });
+    
+    console.log('✅ Test message sent:', result.sid);
+    res.json({ success: true, messageSid: result.sid });
+    
+  } catch (error) {
+    console.error('❌ WhatsApp test error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
