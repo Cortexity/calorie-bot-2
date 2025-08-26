@@ -1149,7 +1149,8 @@ app.post('/complete-user-setup-test', async (req, res) => {
       measurement_system: userData?.measurement_system || null,
       diet_preference: userData?.diet_preference || null,
       diet_preference_custom: userData?.diet_preference_custom || null,
-      weekly_weight_goal: userData?.weekly_weight_goal || null,
+      // FIXED: Set weekly_weight_goal to null for maintain_build users
+      weekly_weight_goal: userData?.fitness_goal === 'maintain_build' ? null : (userData?.weekly_weight_goal || null),
 
       // Timestamp
       created_at: new Date().toISOString()
@@ -1350,7 +1351,8 @@ app.post('/complete-user-setup', async (req, res) => {
       measurement_system: userData?.measurement_system || null,
       diet_preference: userData?.diet_preference || null,
       diet_preference_custom: userData?.diet_preference_custom || null,
-      weekly_weight_goal: userData?.weekly_weight_goal || null,
+      // FIXED: Set weekly_weight_goal to null for maintain_build users
+      weekly_weight_goal: userData?.fitness_goal === 'maintain_build' ? null : (userData?.weekly_weight_goal || null),
       
       // Timestamp
       created_at: new Date().toISOString()
@@ -1477,6 +1479,22 @@ app.put('/api/user/:phone', async (req, res) => {
       return res.status(404).json({ 
         error: 'User not found' 
       });
+    }
+    
+    // Sync email changes to Stripe
+    if (updatedData.email && data[0].stripe_customer_id) {
+      try {
+        console.log('🔄 Syncing email to Stripe customer:', data[0].stripe_customer_id);
+        
+        await stripe.customers.update(data[0].stripe_customer_id, {
+          email: updatedData.email
+        });
+        
+        console.log('✅ Email synced to Stripe successfully');
+      } catch (stripeError) {
+        console.error('❌ Failed to sync email to Stripe:', stripeError.message);
+        // Don't fail the entire request if Stripe sync fails
+      }
     }
     
     console.log('✅ User updated successfully');
@@ -1725,11 +1743,13 @@ You can start texting me now! 💪✅
 🔥 TDEE: *${actualTDEE} calories*
 ⚖️ Current Weight: *${actualWeight}kg*
 🎯 Goal: ${goalText}
-${dietPreference ? `🍽️ Diet: ${dietPreference}` : ''}
+${dietPreference ? `🍽️ Diet: ${dietPreference.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}` : ''}
 
 ⚖️ ${motivationText}
 
-I will take these numbers into account when talking to you!`;
+I will take these numbers into account when talking to you!
+
+Now Snap a photo of your most recent meal! 📸🍽️`;
 
     // Send WhatsApp message using Twilio
     try {
@@ -2110,7 +2130,8 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
       console.log('⏰ Trial ending soon:', subscription.id);
       
       // Optional: Send notification to user about trial ending
-      await handleTrialEnding(subscription);
+      // DISABLED: Trial ending notifications commented out
+      // await handleTrialEnding(subscription);
     }
     
     // Handle failed payments (subscription becomes past_due)

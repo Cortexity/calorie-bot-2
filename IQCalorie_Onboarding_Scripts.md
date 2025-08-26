@@ -1575,10 +1575,9 @@ document.addEventListener("DOMContentLoaded", function() {
 ![10_preferred_diet_clickfunnels.png](10_preferred_diet_clickfunnels.png)
 
 ```html
-<!-- Insert footer script for Preferred Diet -->
-```
-<<script>
-// Diet Preference Selection UI Code
+
+<script>
+// Diet Preference Selection UI Code - ORIGINAL with TRIM FIX ONLY
 // Desktop Version
 document.addEventListener("DOMContentLoaded", function () {
   const everything = document.querySelector("#everything");
@@ -1594,6 +1593,29 @@ document.addEventListener("DOMContentLoaded", function () {
   const other = document.querySelector("#other");
   const otherRowInputField = document.querySelector("#otherRowInputField");
   const otherInputField = document.querySelector("#other-input-field1");
+  
+  // Try to find the actual input element - it might be inside a container
+  let actualInputField = otherInputField;
+  if (otherInputField) {
+    console.log("Initial element:", otherInputField, "Tag:", otherInputField.tagName);
+    
+    if (otherInputField.tagName !== 'INPUT') {
+      // It's a container, find the input inside
+      const inputInside = otherInputField.querySelector('input') || 
+                         otherInputField.querySelector('input[type="text"]') ||
+                         otherInputField.querySelector('textarea');
+      
+      if (inputInside) {
+        actualInputField = inputInside;
+        console.log("Found actual input inside container:", actualInputField, "Tag:", actualInputField.tagName);
+      } else {
+        console.log("No input found inside container, searching children:");
+        for (let i = 0; i < otherInputField.children.length; i++) {
+          console.log("Child", i, ":", otherInputField.children[i]);
+        }
+      }
+    }
+  }
   const nextBtn = document.querySelector("#next-btn-desk-10");
   
   const options = [everything, mediterranean, keto, paleo, vegan, dash, lowCarb, intermittentFasting, glutenFree, flexitarian, other];
@@ -1604,10 +1626,6 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   if (otherRowInputField) {
     otherRowInputField.style.display = "none";
-  }
-  // Set default light gray border on input field
-  if (otherInputField) {
-    otherInputField.style.setProperty("border", "1px solid #d3d3d3", "important");
   }
   // Set default light gray border on input field
   if (otherInputField) {
@@ -1657,12 +1675,22 @@ document.addEventListener("DOMContentLoaded", function () {
             otherRowInputField.style.display = "block";
           }
           // Focus on the input field
-          if (otherInputField) {
-            otherInputField.focus();
+          if (actualInputField) {
+            actualInputField.focus();
           }
           // Store diet preference
           localStorage.setItem('dietPreference', 'other');
           console.log('Diet preference stored: other');
+          
+          // IMPORTANT: Clear any previous compiled data so it gets re-compiled with new diet data
+          localStorage.removeItem('compiledUserData');
+          localStorage.removeItem('supabaseReadyData');
+          console.log('Cleared compiled data for fresh compilation');
+          
+          // IMPORTANT: Clear any previous compiled data so it gets re-compiled with new diet data
+          localStorage.removeItem('compiledUserData');
+          localStorage.removeItem('supabaseReadyData');
+          console.log('Cleared compiled data for fresh compilation');
         } else {
           // Hide the other input field if not "Other"
           if (otherRowInputField) {
@@ -1703,75 +1731,151 @@ document.addEventListener("DOMContentLoaded", function () {
           }
           
           // Check fitness goal and redirect accordingly
-const fitnessGoal = localStorage.getItem('fitnessGoal');
-if (fitnessGoal === 'maintain_build') {
-  // Skip target weight and weekly results for maintain weight users
-  window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
-} else {
-  // Go to target weight for lose/gain weight users
-  window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
-}
+          const fitnessGoal = localStorage.getItem('fitnessGoal');
+          if (fitnessGoal === 'maintain_build') {
+            // Skip target weight and weekly results for maintain weight users
+            window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
+          } else {
+            // Go to target weight for lose/gain weight users
+            window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+          }
         }
       });
     }
   });
   
-  // Handle the other input field
-  if (otherInputField) {
+  // Handle the other input field - FIXED TRIM ERROR + BETTER ELEMENT FINDING
+  if (actualInputField) {
+    console.log("Setting up input handler for:", actualInputField);
+    console.log("Element tag name:", actualInputField.tagName);
+    console.log("Element has value property:", 'value' in actualInputField);
+    
     // Add orange border when typing (on input)
-    otherInputField.addEventListener("input", function() {
-      // Always show orange border when there's content
-      if (this.value !== "") {
-        this.style.setProperty("border", "2px solid #ff6600", "important");
-        // Make next button clickable when there's text
-        if (nextBtn) {
-          nextBtn.style.opacity = "1";
-          nextBtn.style.pointerEvents = "auto";
-          nextBtn.style.cursor = "pointer";
+    actualInputField.addEventListener("input", function() {
+      console.log("Input event triggered, this:", this);
+      console.log("Input event triggered, value:", this.value);
+      
+      // SAFE VALUE RETRIEVAL - Check if this.value exists before using trim()
+      if (this && this.value !== undefined && this.value !== null) {
+        const inputValue = this.value.toString();
+        
+        // Always show orange border when there's content
+        if (inputValue !== "") {
+          console.log("Enabling next button");
+          this.style.setProperty("border", "2px solid #ff6600", "important");
+          // Make next button clickable when there's text
+          if (nextBtn) {
+            nextBtn.style.opacity = "1";
+            nextBtn.style.pointerEvents = "auto";
+            nextBtn.style.cursor = "pointer";
+          }
+          // Store the custom diet preference - SAFE TRIM
+          localStorage.setItem('dietPreferenceCustom', inputValue.trim());
+          console.log('Custom diet preference stored: ' + inputValue.trim());
+          
+          // IMPORTANT: Clear compiled data so it gets re-compiled with new custom diet
+          localStorage.removeItem('compiledUserData');
+          localStorage.removeItem('supabaseReadyData');
+          console.log('Cleared compiled data for fresh compilation with custom diet');
+          
+          // IMPORTANT: Clear compiled data so it gets re-compiled with new custom diet
+          localStorage.removeItem('compiledUserData');
+          localStorage.removeItem('supabaseReadyData');
+          console.log('Cleared compiled data for fresh compilation with custom diet');
+        } else {
+          console.log("Disabling next button");
+          // Remove orange border and make button transparent if empty
+          this.style.setProperty("border", "1px solid #d3d3d3", "important");
+          if (nextBtn) {
+            nextBtn.style.opacity = "0.5";
+            nextBtn.style.pointerEvents = "none";
+            nextBtn.style.cursor = "default";
+          }
         }
-        // Store the custom diet preference
-        localStorage.setItem('dietPreferenceCustom', this.value.trim());
-        console.log('Custom diet preference stored: ' + this.value.trim());
       } else {
-        // Remove orange border and make button transparent if empty
-        this.style.setProperty("border", "1px solid #d3d3d3", "important");
-        if (nextBtn) {
-          nextBtn.style.opacity = "0.5";
-          nextBtn.style.pointerEvents = "none";
-          nextBtn.style.cursor = "default";
-        }
+        console.log("Value is undefined or null, this:", this, "this.value:", this.value);
       }
     });
     
     // Remove border when field loses focus and is empty
-    otherInputField.addEventListener("blur", function() {
-      if (this.value === "") {
+    actualInputField.addEventListener("blur", function() {
+      console.log("Blur event triggered");
+      // SAFE VALUE CHECK
+      if (this && this.value !== undefined && this.value === "") {
         this.style.setProperty("border", "1px solid #d3d3d3", "important");
       }
     });
+  } else {
+    console.log("otherInputField not found, trying alternative selectors");
+    
+    // Try to find the input field with alternative selectors after Other is clicked
+    if (other) {
+      const originalOtherClick = other.onclick;
+      other.addEventListener("click", function() {
+        setTimeout(() => {
+          let inputField = document.querySelector("#other-input-field1") ||
+                          document.querySelector("input[placeholder*='diet']") ||
+                          document.querySelector("#otherRowInputField input") ||
+                          document.querySelector("input[type='text']:not([id])");
+          
+          console.log("Alternative input field found:", inputField);
+          
+          if (inputField && !inputField.hasAttribute('data-handler-added')) {
+            inputField.setAttribute('data-handler-added', 'true');
+            
+            inputField.addEventListener("input", function() {
+              console.log("Alternative input event triggered, value:", this.value);
+              
+              if (this && this.value !== undefined && this.value !== null) {
+                const inputValue = this.value.toString();
+                
+                if (inputValue !== "") {
+                  console.log("Enabling next button via alternative method");
+                  this.style.setProperty("border", "2px solid #ff6600", "important");
+                  if (nextBtn) {
+                    nextBtn.style.opacity = "1";
+                    nextBtn.style.pointerEvents = "auto";
+                    nextBtn.style.cursor = "pointer";
+                  }
+                  localStorage.setItem('dietPreferenceCustom', inputValue.trim());
+                  console.log('Custom diet preference stored: ' + inputValue.trim());
+                } else {
+                  console.log("Disabling next button via alternative method");
+                  this.style.setProperty("border", "1px solid #d3d3d3", "important");
+                  if (nextBtn) {
+                    nextBtn.style.opacity = "0.5";
+                    nextBtn.style.pointerEvents = "none";
+                    nextBtn.style.cursor = "default";
+                  }
+                }
+              }
+            });
+          }
+        }, 200);
+      });
+    }
   }
   
-
-	// Handle next button click
-      if (nextBtn) {
-        nextBtn.addEventListener("click", function(e) {
-          e.preventDefault();
-          // Check if this button is active (opaque)
-          if (this.style.opacity === "1") {
-            const fitnessGoal = localStorage.getItem('fitnessGoal');
-            if (fitnessGoal === 'maintain_build') {
-              window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
-            } else {
-              window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
-            }
-          }
-        });
+  // Handle next button click
+  if (nextBtn) {
+    nextBtn.addEventListener("click", function(e) {
+      e.preventDefault();
+      // Check if this button is active (opaque)
+      if (this.style.opacity === "1") {
+        const fitnessGoal = localStorage.getItem('fitnessGoal');
+        if (fitnessGoal === 'maintain_build') {
+          window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
+        } else {
+          window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+        }
       }
+    });
+  }
 });
 </script>
 
 <script>
-// Mobile Version
+// Mobile Version - FIXED TRIM ERROR
 document.addEventListener("DOMContentLoaded", function () {
   const everything = document.querySelector("#everything");
   const mediterranean = document.querySelector("#mediterranean");
@@ -1879,72 +1983,77 @@ document.addEventListener("DOMContentLoaded", function () {
           }
           
           // Check fitness goal and redirect accordingly
-const fitnessGoal = localStorage.getItem('fitnessGoal');
-if (fitnessGoal === 'maintain_build') {
-  // Skip target weight and weekly results for maintain weight users
-  window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
-} else {
-  // Go to target weight for lose/gain weight users
-  window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
-}
+          const fitnessGoal = localStorage.getItem('fitnessGoal');
+          if (fitnessGoal === 'maintain_build') {
+            // Skip target weight and weekly results for maintain weight users
+            window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
+          } else {
+            // Go to target weight for lose/gain weight users
+            window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+          }
         }
       });
     }
   });
   
-  // Handle the other input field
+  // Handle the other input field - FIXED TRIM ERROR
   if (otherInputField) {
     // Add orange border when typing (on input)
     otherInputField.addEventListener("input", function() {
-      // Always show orange border when there's content
-      if (this.value !== "") {
-        this.style.setProperty("border", "2px solid #ff6600", "important");
-        // Make next button clickable when there's text
-        if (nextBtn) {
-          nextBtn.style.opacity = "1";
-          nextBtn.style.pointerEvents = "auto";
-          nextBtn.style.cursor = "pointer";
-        }
-        // Store the custom diet preference
-        localStorage.setItem('dietPreferenceCustom', this.value.trim());
-        console.log('Custom diet preference stored: ' + this.value.trim());
-      } else {
-        // Remove orange border and make button transparent if empty
-        this.style.setProperty("border", "1px solid #d3d3d3", "important");
-        if (nextBtn) {
-          nextBtn.style.opacity = "0.5";
-          nextBtn.style.pointerEvents = "none";
-          nextBtn.style.cursor = "default";
+      // SAFE VALUE RETRIEVAL - Check if this.value exists before using trim()
+      if (this && this.value !== undefined && this.value !== null) {
+        const inputValue = this.value.toString();
+        
+        // Always show orange border when there's content
+        if (inputValue !== "") {
+          this.style.setProperty("border", "2px solid #ff6600", "important");
+          // Make next button clickable when there's text
+          if (nextBtn) {
+            nextBtn.style.opacity = "1";
+            nextBtn.style.pointerEvents = "auto";
+            nextBtn.style.cursor = "pointer";
+          }
+          // Store the custom diet preference - SAFE TRIM
+          localStorage.setItem('dietPreferenceCustom', inputValue.trim());
+          console.log('Custom diet preference stored: ' + inputValue.trim());
+        } else {
+          // Remove orange border and make button transparent if empty
+          this.style.setProperty("border", "1px solid #d3d3d3", "important");
+          if (nextBtn) {
+            nextBtn.style.opacity = "0.5";
+            nextBtn.style.pointerEvents = "none";
+            nextBtn.style.cursor = "default";
+          }
         }
       }
     });
     
     // Remove border when field loses focus and is empty
     otherInputField.addEventListener("blur", function() {
-      if (this.value === "") {
+      // SAFE VALUE CHECK
+      if (this && this.value !== undefined && this.value === "") {
         this.style.setProperty("border", "1px solid #d3d3d3", "important");
       }
     });
   }
   
   // Handle next button click
-      if (nextBtn) {
-        nextBtn.addEventListener("click", function(e) {
-          e.preventDefault();
-          // Check if this button is active (opaque)
-          if (this.style.opacity === "1") {
-            const fitnessGoal = localStorage.getItem('fitnessGoal');
-            if (fitnessGoal === 'maintain_build') {
-              window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
-            } else {
-              window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
-            }
-          }
-        });
+  if (nextBtn) {
+    nextBtn.addEventListener("click", function(e) {
+      e.preventDefault();
+      // Check if this button is active (opaque)
+      if (this.style.opacity === "1") {
+        const fitnessGoal = localStorage.getItem('fitnessGoal');
+        if (fitnessGoal === 'maintain_build') {
+          window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
+        } else {
+          window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
+        }
       }
+    });
+  }
 });
 </script>
----
 
 ## 11. Target Weight
 
@@ -2422,7 +2531,19 @@ if (fitnessGoal === 'maintain_build') {
                     
                     // Store weekly goal
                     try {
-                        localStorage.setItem('weeklyWeightGoal', buttonId);
+                        // Store weekly goal with safeguard for maintain_build users
+                          try {
+                              const currentFitnessGoal = localStorage.getItem('fitnessGoal');
+                              if (currentFitnessGoal === 'maintain_build') {
+                                  console.log('⚠️ Maintain build user - not storing weekly weight goal');
+                                  localStorage.removeItem('weeklyWeightGoal'); // Clear any existing value
+                              } else {
+                                  localStorage.setItem('weeklyWeightGoal', buttonId);
+                                  console.log('Weekly weight goal stored:', buttonId);
+                              }
+                          } catch (e) {
+                              console.error('Failed to store weekly goal:', e);
+                          }
                         console.log('Weekly weight goal stored:', buttonId);
                     } catch (e) {
                         console.error('Failed to store weekly goal:', e);
@@ -2430,7 +2551,7 @@ if (fitnessGoal === 'maintain_build') {
                     
                     // Redirect to next step
                     setTimeout(function() {
-                        window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/preferred-diet";
+                        window.location.href = "https://www.iqcalorie.com/choose-your-plan";
                     }, 200);
                 });
             });
@@ -2755,26 +2876,34 @@ window.manualTest = manualTest;
                 fatGrams: fatGrams
             };
             
-            // LIMITED SUPABASE DATA - Only fields that exist in current table
-            const supabaseData = {
+                 // EXPANDED SUPABASE DATA - Now includes ALL onboarding fields
+            	const supabaseData = {
                 // Basic info (matching your exact table structure)
                 phone_number: null, // Will be collected later or left null
                 first_name: null, // Will be collected from Stripe
                 last_name: null, // Will be collected from Stripe
-              	gender: rawData.gender || 'male',
+                gender: rawData.gender || 'male',
                 age: parseInt(rawData.age) || 25,
-                
+
                 // Physical measurements (converted to metric, rounded to integers for smallint)
                 height_cm: Math.round(heightCm),
                 weight_kg: Math.round(weightKg),
-                
+
                 // Activity and goals
                 activity_level: rawData.activityLevel || 'active',
                 kcal_goal: calorieGoal,
                 prot_goal: proteinGrams,
                 carb_goal: carbGrams,
                 fat_goal: fatGrams,
-                
+
+                // NEW EXPANDED FIELDS - capturing all missing onboarding data
+                target_weight_kg: Math.round(targetWeightKg) || null,
+                fitness_goal: rawData.fitnessGoal || null,
+                measurement_system: rawData.measurementSystem || null,
+                diet_preference: rawData.dietPreference || null,
+                diet_preference_custom: rawData.dietPreferenceCustom || null,
+                weekly_weight_goal: parseFloat(rawData.weeklyWeightGoal) || null,
+
                 // Timestamp - will be auto-generated by Supabase if not provided
                 created_at: new Date().toISOString()
             };
@@ -2835,15 +2964,100 @@ window.manualTest = manualTest;
         console.log("🗑️ Onboarding data cleared from localStorage");
     };
     
-    // Auto-compile data when this script loads (on Choose Your Plan page)
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", compileUserData);
-    } else {
-        compileUserData();
-    }
+    // Enhanced data compilation with backup method
+function ensureDataCompilation() {
+    console.log("🔄 Ensuring data compilation runs...");
     
-    // Make compile function available globally for testing
-    window.compileUserData = compileUserData;
+    // Check if data already exists
+    const existingData = localStorage.getItem('compiledUserData');
+    if (existingData) {
+        console.log("✅ Compiled data already exists");
+        return;
+    }
+    	console.log("No compiled data found, running compilation...");
+        const result = compileUserData();
+
+        if (result) {
+            console.log("Data compilation successful");
+        } else {
+            console.log("Data compilation failed, trying backup method...");
+          
+        
+        // Backup: try to compile from userProfile if it exists
+        const userProfile = localStorage.getItem('userProfile');
+        if (userProfile) {
+            try {
+                const profile = JSON.parse(userProfile);
+                console.log("🔄 Found userProfile, creating compiledUserData from it...");
+                
+                // Extract the raw data from userProfile
+                const backupCompiledData = {
+                    fullRawData: {
+                        gender: profile.gender || localStorage.getItem('gender'),
+                        age: profile.age || localStorage.getItem('age'),
+                        height: profile.height || localStorage.getItem('height'),
+                        weight: profile.weight || localStorage.getItem('weight'),
+                        targetWeight: profile.targetWeight || localStorage.getItem('targetWeight'),
+                        activityLevel: profile.activityLevel || localStorage.getItem('activityLevel'),
+                        fitnessGoal: profile.fitnessGoal || localStorage.getItem('fitnessGoal'),
+                        measurementSystem: profile.measurementSystem || localStorage.getItem('preferredSystem'),
+                        dietPreference: profile.dietPreference || localStorage.getItem('dietPreference'),
+                        dietPreferenceCustom: profile.dietPreferenceCustom || localStorage.getItem('dietPreferenceCustom'),
+                        weeklyWeightGoal: profile.weeklyWeightGoal || localStorage.getItem('weeklyWeightGoal'),
+                        calculatedTDEE: profile.tdee || localStorage.getItem('calculatedTDEE'),
+                        heightCm: profile.heightCm,
+                        weightKg: profile.weightKg,
+                        targetWeightKg: profile.targetWeightKg,
+                        calorieGoal: profile.tdee,
+                        proteinGrams: Math.round((profile.tdee * 0.30) / 4),
+                        carbGrams: Math.round((profile.tdee * 0.40) / 4),
+                        fatGrams: Math.round((profile.tdee * 0.30) / 9)
+                    },
+                    supabaseData: {
+                        phone_number: null,
+                        first_name: null,
+                        last_name: null,
+                        gender: profile.gender || 'male',
+                        age: parseInt(profile.age) || 25,
+                        height_cm: Math.round(profile.heightCm || 175),
+                        weight_kg: Math.round(profile.weightKg || 70),
+                        activity_level: profile.activityLevel || 'active',
+                        kcal_goal: profile.tdee || 2000,
+                        prot_goal: Math.round((profile.tdee * 0.30) / 4) || 150,
+                        carb_goal: Math.round((profile.tdee * 0.40) / 4) || 200,
+                        fat_goal: Math.round((profile.tdee * 0.30) / 9) || 67,
+                        target_weight_kg: Math.round(profile.targetWeightKg) || null,
+                        fitness_goal: profile.fitnessGoal || null,
+                        measurement_system: profile.measurementSystem || null,
+                        diet_preference: profile.dietPreference || null,
+                        diet_preference_custom: profile.dietPreferenceCustom || null,
+                        weekly_weight_goal: parseFloat(profile.weeklyWeightGoal) || null,
+                        created_at: new Date().toISOString()
+                    }
+                };
+                
+                localStorage.setItem('compiledUserData', JSON.stringify(backupCompiledData));
+                localStorage.setItem('supabaseReadyData', JSON.stringify(backupCompiledData.supabaseData));
+                localStorage.setItem('dataReadyForSupabase', 'true');
+                console.log("✅ Backup compilation successful");
+                
+            } catch (e) {
+                console.error("❌ Backup compilation failed:", e);
+            }
+        }
+    }
+}
+
+// Run compilation check
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", ensureDataCompilation);
+} else {
+    ensureDataCompilation();
+}
+
+// Make functions available globally for testing
+window.compileUserData = compileUserData;
+window.ensureDataCompilation = ensureDataCompilation;
     
 })();
 </script>
@@ -3211,11 +3425,11 @@ async function redirectToCheckout(planType) {
 (function() {
     "use strict";
     
-         console.log("🎯 CONFIRMATION PAGE - Auto User Setup Starting");
+         console.log("?? CONFIRMATION PAGE - Auto User Setup Starting");
 
         // Get checkout key and session_id from URL - ENHANCED DEBUGGING
         function getURLParams() {
-            console.log("🔍 DEBUGGING URL PARAMETERS");
+            console.log("?? DEBUGGING URL PARAMETERS");
             console.log("  - Full URL:", window.location.href);
             console.log("  - Search string:", window.location.search);
             console.log("  - Hash:", window.location.hash);
@@ -3227,19 +3441,19 @@ async function redirectToCheckout(planType) {
             let checkoutKey = urlParams.get('checkout_key');
             let sessionId = urlParams.get('session_id');
 
-            console.log("📋 Method 1 (standard) results:");
+            console.log("?? Method 1 (standard) results:");
             console.log("  - checkout_key:", checkoutKey);
             console.log("  - session_id:", sessionId);
 
             // Method 2: Check if parameters exist with different names
-            console.log("📋 All URL parameters found:");
+            console.log("?? All URL parameters found:");
             for (let [key, value] of urlParams) {
                 console.log(`  - ${key}: ${value}`);
             }
 
             // Method 3: Manual parsing as fallback
             if (!checkoutKey || !sessionId) {
-                console.log("🔄 Trying manual parsing...");
+                console.log("?? Trying manual parsing...");
                 const searchString = window.location.search.substring(1);
                 const params = searchString.split('&');
 
@@ -3258,11 +3472,11 @@ async function redirectToCheckout(planType) {
 
             // Method 4: Check if Stripe replaced session_id
             if (sessionId && sessionId === '{CHECKOUT_SESSION_ID}') {
-                console.log("⚠️ Stripe placeholder not replaced!");
+                console.log("?? Stripe placeholder not replaced!");
                 sessionId = null;
             }
 
-            console.log("🎯 FINAL RESULTS:");
+            console.log("?? FINAL RESULTS:");
             console.log("  - checkoutKey:", checkoutKey || "NOT FOUND");
             console.log("  - sessionId:", sessionId || "NOT FOUND");
 
@@ -3274,33 +3488,33 @@ async function redirectToCheckout(planType) {
             try {
                 const compiledDataStr = localStorage.getItem('compiledUserData');
                 if (!compiledDataStr) {
-                    console.warn("⚠️ No compiled user data found");
+                    console.warn("?? No compiled user data found");
                     return null;
                 }
 
                 const compiledData = JSON.parse(compiledDataStr);
-                console.log("👤 Retrieved user data:", compiledData);
+                console.log("?? Retrieved user data:", compiledData);
                 return compiledData;
             } catch (error) {
-                console.error("❌ Error retrieving user data:", error);
+                console.error("? Error retrieving user data:", error);
                 return null;
             }
         }
 
         // Get phone number from localStorage (captured on landing page)
         function getPhoneNumber() {
-            console.log("📱 GETTING PHONE NUMBER FROM LOCALSTORAGE...");
+            console.log("?? GETTING PHONE NUMBER FROM LOCALSTORAGE...");
 
             // Get phone from localStorage (set by landing page script)
             let phone = localStorage.getItem('userPhone');
 
-            console.log("📱 Raw phone from localStorage:", phone);
+            console.log("?? Raw phone from localStorage:", phone);
 
             if (!phone) {
-                console.warn("⚠️ No phone number found in localStorage");
+                console.warn("?? No phone number found in localStorage");
 
                 // Debug: Show all localStorage keys
-                console.log("🔍 All localStorage keys:");
+                console.log("?? All localStorage keys:");
                 for (let i = 0; i < localStorage.length; i++) {
                     const key = localStorage.key(i);
                     const value = localStorage.getItem(key);
@@ -3315,18 +3529,18 @@ async function redirectToCheckout(planType) {
 
             // Validate that it looks like a phone number
             if (!phone.startsWith('+') || phone.length < 10) {
-                console.warn("⚠️ Phone number format looks incorrect:", phone);
+                console.warn("?? Phone number format looks incorrect:", phone);
                 return null;
             }
 
-            console.log("📱 Final cleaned phone number:", phone);
+            console.log("?? Final cleaned phone number:", phone);
             return phone;
         }
 
         // Create user account via backend
         async function createUserAccount(checkoutKey, sessionId, userData, phoneNumber) {
-            console.log("🚀 Creating user account...");
-            console.log("📊 DEBUG - Function inputs:");
+            console.log("?? Creating user account...");
+            console.log("?? DEBUG - Function inputs:");
             console.log("  - checkoutKey:", checkoutKey);
             console.log("  - sessionId:", sessionId);
             console.log("  - phoneNumber:", phoneNumber);
@@ -3334,12 +3548,12 @@ async function redirectToCheckout(planType) {
 
             // Check if userData.supabaseData exists
             if (!userData) {
-                console.error("❌ userData is null/undefined!");
+                console.error("? userData is null/undefined!");
                 userData = {};
             }
 
             if (!userData.supabaseData) {
-                console.warn("⚠️ userData.supabaseData is missing - using defaults");
+                console.warn("?? userData.supabaseData is missing - using defaults");
                 userData.supabaseData = {};
             }
 
@@ -3353,27 +3567,37 @@ async function redirectToCheckout(planType) {
                         subscription_id: "fetch_from_session"
                     },
                     userData: {
-                        // Allow phone to be null
-                        phone_number: phoneNumber || null,
-                        gender: userData.supabaseData.gender || "male",
-                        age: userData.supabaseData.age || 25,
-                        height_cm: userData.supabaseData.height_cm || 175,
-                        weight_kg: userData.supabaseData.weight_kg || 70,
-                        activity_level: userData.supabaseData.activity_level || "active",
-                        kcal_goal: userData.supabaseData.kcal_goal || 2000,
-                        prot_goal: userData.supabaseData.prot_goal || 150,
-                        carb_goal: userData.supabaseData.carb_goal || 200,
-                        fat_goal: userData.supabaseData.fat_goal || 67
+    // Allow phone to be null
+    phone_number: phoneNumber || null,
+    
+    // Basic fields
+    gender: userData.supabaseData.gender || "male",
+    age: userData.supabaseData.age || 25,
+    height_cm: userData.supabaseData.height_cm || 175,
+    weight_kg: userData.supabaseData.weight_kg || 70,
+    activity_level: userData.supabaseData.activity_level || "active",
+    kcal_goal: userData.supabaseData.kcal_goal || 2000,
+    prot_goal: userData.supabaseData.prot_goal || 150,
+    carb_goal: userData.supabaseData.carb_goal || 200,
+    fat_goal: userData.supabaseData.fat_goal || 67,
+    
+    // NEW EXPANDED FIELDS - Send all missing onboarding data to backend
+    target_weight_kg: userData.supabaseData.target_weight_kg || null,
+    fitness_goal: userData.supabaseData.fitness_goal || null,
+    measurement_system: userData.supabaseData.measurement_system || null,
+    diet_preference: userData.supabaseData.diet_preference || null,
+    diet_preference_custom: userData.supabaseData.diet_preference_custom || null,
+    weekly_weight_goal: userData.supabaseData.weekly_weight_goal || null
                     }
                 };
 
-                console.log("🔍 COMPLETE REQUEST DATA BEING SENT:");
+                console.log("?? COMPLETE REQUEST DATA BEING SENT:");
                 console.log("  - phoneNumber variable:", phoneNumber);
                 console.log("  - userData.phone_number:", requestData.userData.phone_number);
                 console.log("  - Complete requestData:", JSON.stringify(requestData, null, 2));
 
                 const backendUrl = 'https://bass-ethical-piranha.ngrok-free.app/complete-user-setup';
-                console.log("📤 Sending POST request to:", backendUrl);
+                console.log("?? Sending POST request to:", backendUrl);
 
                 // Make the actual request
                 const response = await fetch(backendUrl, {
@@ -3384,16 +3608,16 @@ async function redirectToCheckout(planType) {
                     body: JSON.stringify(requestData)
                 });
 
-                console.log("📨 Response received:");
+                console.log("?? Response received:");
                 console.log("  - Status:", response.status);
                 console.log("  - StatusText:", response.statusText);
                 console.log("  - OK?", response.ok);
 
                 const result = await response.json();
-                console.log("📦 Response JSON:", result);
+                console.log("?? Response JSON:", result);
 
                 if (response.ok) {
-                    console.log("✅ User account created successfully:", result);
+                    console.log("? User account created successfully:", result);
 
                     // Clear localStorage after successful creation
                     const keysToRemove = [
@@ -3403,16 +3627,16 @@ async function redirectToCheckout(planType) {
                     ];
 
                     keysToRemove.forEach(key => localStorage.removeItem(key));
-                    console.log("🗑️ Cleared user data from localStorage");
+                    console.log("??? Cleared user data from localStorage");
 
                     return result;
                 } else {
-                    console.error("❌ Failed to create user account:", result);
+                    console.error("? Failed to create user account:", result);
                     return null;
                 }
 
             } catch (error) {
-                console.error("❌ Error in createUserAccount:");
+                console.error("? Error in createUserAccount:");
                 console.error("  - Error name:", error.name);
                 console.error("  - Error message:", error.message);
                 console.error("  - Full error:", error);
@@ -3422,7 +3646,7 @@ async function redirectToCheckout(planType) {
 
         // Trigger WhatsApp welcome message
         async function triggerWhatsAppWelcome(phoneNumber, userData) {
-            console.log("📱 Triggering WhatsApp welcome message for:", phoneNumber);
+            console.log("?? Triggering WhatsApp welcome message for:", phoneNumber);
 
             try {
                 const welcomeData = {
@@ -3430,7 +3654,7 @@ async function redirectToCheckout(planType) {
                     userData: userData
                 };
 
-                console.log("📤 Sending welcome trigger with data:", welcomeData);
+                console.log("?? Sending welcome trigger with data:", welcomeData);
 
                 const response = await fetch('https://bass-ethical-piranha.ngrok-free.app/trigger-welcome', {
                     method: 'POST',
@@ -3443,35 +3667,35 @@ async function redirectToCheckout(planType) {
                 const result = await response.json();
 
                 if (response.ok) {
-                    console.log("✅ WhatsApp welcome message triggered successfully:", result);
+                    console.log("? WhatsApp welcome message triggered successfully:", result);
                     return true;
                 } else {
-                    console.error("❌ Failed to trigger WhatsApp welcome:", result);
+                    console.error("? Failed to trigger WhatsApp welcome:", result);
                     return false;
                 }
 
             } catch (error) {
-                console.error("❌ Error triggering WhatsApp welcome:", error);
+                console.error("? Error triggering WhatsApp welcome:", error);
                 return false;
             }
         }
 
         // Main execution
         async function initializeUserSetup() {
-            console.log("🔄 Starting automatic user setup...");
+            console.log("?? Starting automatic user setup...");
 
             // Get URL parameters
             let { checkoutKey, sessionId } = getURLParams();
 
             // TEST MODE: If no parameters found, try test values
             if (!checkoutKey && !sessionId) {
-                console.log("⚠️ No URL parameters found - checking for test mode");
+                console.log("?? No URL parameters found - checking for test mode");
 
                 // Check if we're in test mode (you can trigger this manually)
                 const testMode = localStorage.getItem('testMode') === 'true';
 
                 if (testMode) {
-                    console.log("🧪 TEST MODE ACTIVATED - Using test values");
+                    console.log("?? TEST MODE ACTIVATED - Using test values");
                     checkoutKey = 'checkout_test_' + Date.now();
                     sessionId = 'cs_test_' + Date.now();
 
@@ -3481,9 +3705,9 @@ async function redirectToCheckout(planType) {
             }
 
             if (!checkoutKey || !sessionId) {
-                console.warn("⚠️ Missing checkout key or session ID");
-                console.log("📍 Current location:", window.location.href);
-                console.log("💡 Expected format: ?session_id=cs_xxx&checkout_key=checkout_xxx");
+                console.warn("?? Missing checkout key or session ID");
+                console.log("?? Current location:", window.location.href);
+                console.log("?? Expected format: ?session_id=cs_xxx&checkout_key=checkout_xxx");
 
                 // Don't return - continue to see what else works
                 // return;
@@ -3492,19 +3716,19 @@ async function redirectToCheckout(planType) {
             // Get user data from localStorage
             const userData = getStoredUserData();
             if (!userData || !userData.supabaseData) {
-                console.warn("⚠️ No user data found - will use defaults");
+                console.warn("?? No user data found - will use defaults");
                 // Don't return - continue with defaults
             }
 
             // Get phone number from localStorage (may be null for Test 2)
             const phoneNumber = getPhoneNumber();
             if (!phoneNumber) {
-                console.warn("⚠️ No phone number in localStorage - will rely on Stripe");
+                console.warn("?? No phone number in localStorage - will rely on Stripe");
                 // DON'T RETURN - continue with null phone
             }
 
             // Wait a moment for webhook to process
-            console.log("⏱️ Waiting 3 seconds for webhook to process...");
+            console.log("?? Waiting 3 seconds for webhook to process...");
             await new Promise(resolve => setTimeout(resolve, 3000));
 
             // Create user account (backend will handle missing phone)
@@ -3513,29 +3737,29 @@ async function redirectToCheckout(planType) {
             if (userResult && userResult.user) {
                 // Use the phone from the database (Stripe's phone), not localStorage
                 const actualPhoneNumber = userResult.user.phone_number;
-                console.log("📱 Using phone from database (not localStorage):", actualPhoneNumber);
+                console.log("?? Using phone from database (not localStorage):", actualPhoneNumber);
 
                 // Trigger WhatsApp welcome message with correct phone
                 if (actualPhoneNumber && !actualPhoneNumber.startsWith('+1000')) {
                     const welcomeResult = await triggerWhatsAppWelcome(actualPhoneNumber, userData);
 
                     if (welcomeResult) {
-                        console.log("🎉 USER SETUP AND WHATSAPP WELCOME COMPLETE!");
+                        console.log("?? USER SETUP AND WHATSAPP WELCOME COMPLETE!");
                     } else {
-                        console.log("⚠️ User account created but WhatsApp welcome failed");
+                        console.log("?? User account created but WhatsApp welcome failed");
                     }
                 } else {
-                    console.log("⚠️ User created but no valid phone for WhatsApp");
+                    console.log("?? User created but no valid phone for WhatsApp");
                 }
             } else {
-                console.log("❌ User setup failed - please contact support");
+                console.log("? User setup failed - please contact support");
             }
         }
 
         // Add test functions for manual debugging
         window.debugConfirmation = {
             checkURL: function() {
-                console.log("🔍 URL Debug:");
+                console.log("?? URL Debug:");
                 console.log("  Full URL:", window.location.href);
                 console.log("  Search:", window.location.search);
                 console.log("  Params:", new URLSearchParams(window.location.search).toString());
@@ -3543,7 +3767,7 @@ async function redirectToCheckout(planType) {
             },
 
             testWithFakeParams: function() {
-                console.log("🧪 Testing with fake parameters");
+                console.log("?? Testing with fake parameters");
                 // Temporarily modify the URL
                 const fakeURL = window.location.origin + window.location.pathname + 
                                "?session_id=cs_test_123&checkout_key=checkout_test_456";
@@ -3559,12 +3783,12 @@ async function redirectToCheckout(planType) {
             },
 
             runManually: async function() {
-                console.log("🚀 Running user setup manually");
+                console.log("?? Running user setup manually");
                 await initializeUserSetup();
             }
         };
 
-        console.log("🧪 Debug functions available:");
+        console.log("?? Debug functions available:");
         console.log("  window.debugConfirmation.checkURL()");
         console.log("  window.debugConfirmation.testWithFakeParams()");
         console.log("  window.debugConfirmation.runManually()");
@@ -3576,7 +3800,9 @@ async function redirectToCheckout(planType) {
             initializeUserSetup();
         }
 
-        console.log("🔧 Auto user setup script loaded");
+        console.log("?? Auto user setup script loaded");
     
 })();
 </script>
+
+
