@@ -580,6 +580,7 @@ Available commands:
       - When responding to questions that should NOT use the standardized meal format, break your answer into small, readable paragraphs
       - Keep paragraphs short (1-3 sentences each) for easy reading on mobile
       - Use natural, conversational language
+      - 
 
   When users send meal inputs, create a meal log using this format every time:
   

@@ -297,6 +297,14 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
 })();
 </script>
 
+<!-- Insert HEADER script for Main Landing Page -->
+
+<script>
+// Clear all localStorage when landing page loads
+localStorage.clear();
+console.log('Landing page loaded - localStorage cleared');
+</script>
+
 ## 1. Gender Selection
 
 ![1_gender_selection_clickfunnels.png](1_gender_selection_clickfunnels.png)
@@ -304,6 +312,7 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
 ```html
 <!-- Insert footer script for Gender Selection -->
 ```
+
 <script>
 // Gender Selection UI Code
 //desktop  
@@ -358,6 +367,17 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
     }
   });
 </script>
+
+<!-- Insert HEADER script for Gender Selection  -->
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
+
 ---
 
 ## 2. Measurement System
@@ -455,7 +475,23 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
     }
   });
 </script>
+
+
 ---
+```html
+<!-- Insert HEADER script for Measurement System -->
+```
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('gender') || !document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
+
+
+
 
 ## 3. Height Input
 
@@ -463,8 +499,7 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
 
 ```html
 <!-- Insert footer script for Height -->
-```
-<script>
+```<script>
 // Hide metric row vs imperial row logic
   
   document.addEventListener("DOMContentLoaded", function () {
@@ -777,6 +812,23 @@ if (window.heightValidationLoaded) {
   }, 500);
 }
 </script>
+
+
+
+<!-- Insert HEADER script for Height -->
+<script>
+// Check for bypass parameter first
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  // Skip protection for editing
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('preferredSystem') || !document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
+
+
+
 ---
 
 ## 4. Weight Input
@@ -1008,6 +1060,18 @@ if (window.weightValidationLoaded) {Sto
   }, 500);
 }
 </script>
+
+<!-- Insert HEADER script for Weight -->
+<script>
+// Check for bypass parameter first
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  // Skip protection for editing
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('height') || !document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
 ---
 
 ## 5. Age Input
@@ -1141,7 +1205,7 @@ if (window.ageValidationLoaded) {
                 errorMsg.style.display = "block";
               }
             }
-          }, 800);
+          }, 265);
         }
       });
     } else {
@@ -1151,6 +1215,17 @@ if (window.ageValidationLoaded) {
     console.log("Age validation setup complete!");
     
   }, 500);
+}
+</script>
+
+
+<!-- Insert HEADER script for Age -->
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('weight') || !document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
 }
 </script>
 ---
@@ -1305,6 +1380,18 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 </script>
+
+<!-- Insert HEADER script for Primary Fitness Goal -->
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('age') || !document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
+
+
 ---
 
 ## 7. Activity Level
@@ -1314,6 +1401,7 @@ document.addEventListener("DOMContentLoaded", function () {
 ```html
 <!-- Insert footer script for Activity Level -->
 ```
+
 <script>
 (function() {
     "use strict";
@@ -1405,6 +1493,19 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 })();
 </script>
+
+
+<!-- Insert HEADER script for Activity Level -->
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('fitnessGoal') || !document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
+
+
 ---
 
 ## 8. Calculating Results (Loading Page)
@@ -1413,7 +1514,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
 ```html
 <!-- Insert footer script for Calculating Results -->
-```
 <script>
 (function() {
     "use strict";
@@ -1569,6 +1669,16 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 </script>
 ---
+
+<!-- Insert HEADER script for Your Results -->
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('activityLevel') || !document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
 
 ## 10. Preferred Diet
 
@@ -1875,7 +1985,7 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 
 <script>
-// Mobile Version - FIXED TRIM ERROR
+// Mobile Version - BORDER FIX (added border-radius to match corners)
 document.addEventListener("DOMContentLoaded", function () {
   const everything = document.querySelector("#everything");
   const mediterranean = document.querySelector("#mediterranean");
@@ -1889,7 +1999,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const flexitarian = document.querySelector("#flexitarian");
   const other = document.querySelector("#other");
   const otherRowInputField = document.querySelector("#otherRowInputField");
-  const otherInputField = document.querySelector("#other-input-field");
+  const otherInputField = document.querySelector("#other-input-field1");
   const nextBtn = document.querySelector("#next-btn-mob-10");
   
   const options = [everything, mediterranean, keto, paleo, vegan, dash, lowCarb, intermittentFasting, glutenFree, flexitarian, other];
@@ -1942,7 +2052,6 @@ document.addEventListener("DOMContentLoaded", function () {
           }
           // Store diet preference
           localStorage.setItem('dietPreference', 'other');
-          console.log('Diet preference stored: other');
         } else {
           // Hide the other input field if not "Other"
           if (otherRowInputField) {
@@ -1952,43 +2061,31 @@ document.addEventListener("DOMContentLoaded", function () {
           // Store diet preference based on which option was clicked
           if (this === everything) {
             localStorage.setItem('dietPreference', 'everything');
-            console.log('Diet preference stored: everything');
           } else if (this === mediterranean) {
             localStorage.setItem('dietPreference', 'mediterranean');
-            console.log('Diet preference stored: mediterranean');
           } else if (this === keto) {
             localStorage.setItem('dietPreference', 'keto');
-            console.log('Diet preference stored: keto');
           } else if (this === paleo) {
             localStorage.setItem('dietPreference', 'paleo');
-            console.log('Diet preference stored: paleo');
           } else if (this === vegan) {
             localStorage.setItem('dietPreference', 'vegan');
-            console.log('Diet preference stored: vegan');
           } else if (this === dash) {
             localStorage.setItem('dietPreference', 'dash');
-            console.log('Diet preference stored: dash');
           } else if (this === lowCarb) {
             localStorage.setItem('dietPreference', 'lowCarb');
-            console.log('Diet preference stored: lowCarb');
           } else if (this === intermittentFasting) {
             localStorage.setItem('dietPreference', 'intermittentFasting');
-            console.log('Diet preference stored: intermittentFasting');
           } else if (this === glutenFree) {
             localStorage.setItem('dietPreference', 'glutenFree');
-            console.log('Diet preference stored: glutenFree');
           } else if (this === flexitarian) {
             localStorage.setItem('dietPreference', 'flexitarian');
-            console.log('Diet preference stored: flexitarian');
           }
           
           // Check fitness goal and redirect accordingly
           const fitnessGoal = localStorage.getItem('fitnessGoal');
           if (fitnessGoal === 'maintain_build') {
-            // Skip target weight and weekly results for maintain weight users
             window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/choose-your-plan";
           } else {
-            // Go to target weight for lose/gain weight users
             window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/target-weight";
           }
         }
@@ -1996,43 +2093,46 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
   
-  // Handle the other input field - FIXED TRIM ERROR
+  // Handle the other input field - FIXED BORDER STYLING
   if (otherInputField) {
     // Add orange border when typing (on input)
-    otherInputField.addEventListener("input", function() {
-      // SAFE VALUE RETRIEVAL - Check if this.value exists before using trim()
-      if (this && this.value !== undefined && this.value !== null) {
-        const inputValue = this.value.toString();
-        
-        // Always show orange border when there's content
-        if (inputValue !== "") {
-          this.style.setProperty("border", "2px solid #ff6600", "important");
-          // Make next button clickable when there's text
-          if (nextBtn) {
-            nextBtn.style.opacity = "1";
-            nextBtn.style.pointerEvents = "auto";
-            nextBtn.style.cursor = "pointer";
-          }
-          // Store the custom diet preference - SAFE TRIM
-          localStorage.setItem('dietPreferenceCustom', inputValue.trim());
-          console.log('Custom diet preference stored: ' + inputValue.trim());
-        } else {
-          // Remove orange border and make button transparent if empty
-          this.style.setProperty("border", "1px solid #d3d3d3", "important");
-          if (nextBtn) {
-            nextBtn.style.opacity = "0.5";
-            nextBtn.style.pointerEvents = "none";
-            nextBtn.style.cursor = "default";
-          }
+    otherInputField.addEventListener("input", function(event) {
+      // Improved value retrieval
+      const inputValue = (this.value !== undefined && this.value !== null) ? 
+                        this.value.toString() : 
+                        (event.target.value || "");
+      
+      // Always show orange border when there's content
+      if (inputValue !== "" && inputValue !== "undefined") {
+        // FIXED: Added border-radius to eliminate white corners
+        this.style.setProperty("border", "2px solid #ff6600", "important");
+        this.style.setProperty("border-radius", "12px", "important");
+        // Make next button clickable when there's text
+        if (nextBtn) {
+          nextBtn.style.opacity = "1";
+          nextBtn.style.pointerEvents = "auto";
+          nextBtn.style.cursor = "pointer";
+        }
+        // Store the custom diet preference
+        localStorage.setItem('dietPreferenceCustom', inputValue.trim());
+      } else {
+        // Remove orange border and make button transparent if empty
+        this.style.setProperty("border", "1px solid #d3d3d3", "important");
+        this.style.setProperty("border-radius", "12px", "important");
+        if (nextBtn) {
+          nextBtn.style.opacity = "0.5";
+          nextBtn.style.pointerEvents = "none";
+          nextBtn.style.cursor = "default";
         }
       }
     });
     
     // Remove border when field loses focus and is empty
     otherInputField.addEventListener("blur", function() {
-      // SAFE VALUE CHECK
-      if (this && this.value !== undefined && this.value === "") {
+      const inputValue = this.value || "";
+      if (inputValue === "") {
         this.style.setProperty("border", "1px solid #d3d3d3", "important");
+        this.style.setProperty("border-radius", "12px", "important");
       }
     });
   }
@@ -2055,6 +2155,19 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 
+
+<!-- Insert HEADER script for Preferred Diet -->
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('calculatedTDEE') || !document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
+
+
+
 ## 11. Target Weight
 
 ![11_target_weight_clickfunnels.png](11_target_weight_clickfunnels.png)
@@ -2063,14 +2176,16 @@ document.addEventListener("DOMContentLoaded", function () {
 <!-- Insert footer script for Target Weight -->
 ```
 <script>
-// Target Weight Page - Complete Fix
+// Target Weight Page - Complete Fix WITH DEBUG TIMING
 (function() {
     "use strict";
     
-    console.log("Target Weight page script loading...");
+    const pageStartTime = performance.now();
+    console.log("Target Weight script start at", pageStartTime.toFixed(1) + "ms");
     
     function initTargetWeight() {
-        console.log("🎯 TARGET WEIGHT PAGE INIT START 🎯");
+        const initStartTime = performance.now() - pageStartTime;
+        console.log("Init start at +" + initStartTime.toFixed(1) + "ms");
         
         var fitnessGoal, measurementSystem, currentWeight;
         
@@ -2093,14 +2208,14 @@ document.addEventListener("DOMContentLoaded", function () {
         
         // CRITICAL: Redirect maintain weight users immediately
         if (fitnessGoal === "maintain_build") {
-            console.log("🔄 Redirecting maintain weight user immediately");
+            console.log("Redirecting maintain weight user immediately");
             window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/preferred-diet";
             return;
         }
         
         // Validate fitness goal
         if (!fitnessGoal || (fitnessGoal !== "lose_weight" && fitnessGoal !== "gain_weight")) {
-            console.log("❌ Invalid fitness goal, redirecting to primary fitness goal");
+            console.log("Invalid fitness goal, redirecting to primary fitness goal");
             window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/primary-fitness-goal";
             return;
         }
@@ -2134,31 +2249,11 @@ document.addEventListener("DOMContentLoaded", function () {
             nextBtnMobile: !!nextBtnMobile
         });
         
-        // STEP 1: Hide everything initially
-        console.log("🔒 Hiding all elements initially");
         
-        // Hide both rows
-        if (metricRow) metricRow.style.display = "none";
-        if (imperialRow) imperialRow.style.display = "none";
-        
-        // Hide ALL error messages
-        allErrorElements.forEach(function(el) {
-            if (el) {
-                el.style.display = "none";
-                console.log("Hidden error element:", el.id);
-            }
-        });
-        
-        // Disable buttons
-        [nextBtnDesktop, nextBtnMobile].forEach(function(btn) {
-            if (btn) {
-                btn.style.opacity = "0.5";
-                btn.style.pointerEvents = "none";
-            }
-        });
         
         // STEP 2: Show ONLY the correct measurement system
-        console.log("🎯 Showing correct measurement system:", measurementSystem);
+        const showStartTime = performance.now() - pageStartTime;
+        console.log("SHOWING correct system at +" + showStartTime.toFixed(1) + "ms:", measurementSystem);
         
         var activeInput = null;
         var isMetricActive = false;
@@ -2167,20 +2262,23 @@ document.addEventListener("DOMContentLoaded", function () {
             metricRow.style.display = "block";
             activeInput = metricInput;
             isMetricActive = true;
-            console.log("✅ Showing ONLY metric row");
+            console.log("Showed ONLY metric row");
         } else if (measurementSystem === "imperial" && imperialRow) {
             imperialRow.style.display = "block";
             activeInput = imperialInput;
             isMetricActive = false;
-            console.log("✅ Showing ONLY imperial row");
+            console.log("Showed ONLY imperial row");
         } else {
-            console.error("❌ Could not determine measurement system or find rows");
+            console.error("Could not determine measurement system or find rows");
             return;
         }
         
+        const showEndTime = performance.now() - pageStartTime;
+        console.log("INIT COMPLETE at +" + showEndTime.toFixed(1) + "ms");
+        
         // Button control functions
         function enableButtons() {
-            console.log("🟢 Enabling buttons");
+            console.log("Enabling buttons");
             [nextBtnDesktop, nextBtnMobile].forEach(function(btn) {
                 if (btn) {
                     btn.style.opacity = "1";
@@ -2190,7 +2288,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         
         function disableButtons() {
-            console.log("🔴 Disabling buttons");
+            console.log("Disabling buttons");
             [nextBtnDesktop, nextBtnMobile].forEach(function(btn) {
                 if (btn) {
                     btn.style.opacity = "0.5";
@@ -2201,7 +2299,7 @@ document.addEventListener("DOMContentLoaded", function () {
         
         // Validation function
         function validateInput(value) {
-            console.log("🔍 Validating input:", {
+            console.log("Validating input:", {
                 value: value,
                 currentWeight: currentWeight,
                 fitnessGoal: fitnessGoal,
@@ -2254,17 +2352,17 @@ document.addEventListener("DOMContentLoaded", function () {
                 disableButtons();
                 if (errorToShow) {
                     errorToShow.style.display = "block";
-                    console.log("❌ Showing error:", errorToShow.id);
+                    console.log("Showing error:", errorToShow.id);
                 }
                 return false;
             }
             
             // Valid input
-            console.log("✅ Input is valid");
+            console.log("Input is valid");
             enableButtons();
             try {
                 localStorage.setItem("targetWeight", value);
-                console.log("💾 Target weight stored:", value);
+                console.log("Target weight stored:", value);
             } catch (e) {
                 console.error("Failed to store target weight:", e);
             }
@@ -2273,25 +2371,25 @@ document.addEventListener("DOMContentLoaded", function () {
         
         // Add input listener to active input only
         if (activeInput) {
-            console.log("🎧 Adding input listener to active input");
+            console.log("Adding input listener to active input");
             activeInput.addEventListener("input", function() {
                 validateInput(this.value);
             });
         } else {
-            console.error("❌ No active input found");
+            console.error("No active input found");
         }
         
         // Add button click handlers
         function handleNextClick(e) {
             if (this.style.opacity === "1") {
-                console.log("▶️ Proceeding to weekly results");
+                console.log("Proceeding to weekly results");
                 setTimeout(function() {
                     window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/weekly-results";
                 }, 100);
             } else {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log("🚫 Button click prevented - validation required");
+                console.log("Button click prevented - validation required");
             }
         }
         
@@ -2301,7 +2399,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         });
         
-        console.log("🎉 Target Weight initialization complete");
+        console.log("Target Weight initialization complete");
     }
     
     // Execute when DOM is ready
@@ -2312,11 +2410,18 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 })();
 </script>
----
 
-```html
-<!-- Insert header script for Target Weight -->
-```
+
+---
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('dietPreference') || !document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
+
 <!-- Add this script in the HEADER section of the Target Weight page, not footer -->
 <script>
 // IMMEDIATE redirect check - runs before page renders
@@ -2332,16 +2437,31 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 </script>
 
+
 <!-- Add this script in the CSS section of the Target Weight page, not footer -->
-<style>
-/* Hide all error messages by default to prevent flash */
-#metric-target-weight-loss-error,
-#metric-target-weight-gain-error,
-#imperial-target-weight-loss-error,
-#imperial-target-weight-gain-error {
-    display: none !important;
+#metricTargetWeightRow{
+  display:none;
 }
-</style>
+
+#imperialTargetWeightRow{
+  display:none;
+}
+
+#metric-target-weight-loss-error{
+  display:none;
+}
+
+#metric-target-weight-gain-error{
+  display:none;
+}
+
+#imperial-target-weight-gain-error{
+  display:none;
+}
+
+#imperial-target-weight-loss-error{
+  display:none;
+}
 
 
 
@@ -2574,6 +2694,18 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 </script>
 ---
+
+<!-- Insert HEADER script for Weekly Results -->
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('targetWeight') || !document.referrer.includes('iqcalorie.com')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
+
+
 
 ## 13. Choose Your Plan 
 
@@ -3343,12 +3475,25 @@ async function redirectToCheckout(planType) {
 })();
 </script>
 
+
+<!-- Insert HEADER script for Choose Your Plan -->
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('weeklyWeightGoal') || (!document.referrer.includes('iqcalorie.com') && !document.referrer.includes('stripe.com'))) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
+
+
 ```CSS
 <!-- Insert CSS Custom Code for Choose Your Plan -->
 ```
 <!-- Add this script in the CSS Custom Code section of the Choose Your Plan page, not footer -->
 
 /*
+
 #gainWeightMet u{
   color: #ff6600;
   text-decoration: none;
@@ -3413,14 +3558,15 @@ async function redirectToCheckout(planType) {
 
 #freeTrial2 a{
   background: linear-gradient(135deg, #ff7300, #ffbb00); /* orange to golden-yellow */
-}
+  
+  }
 
 */
 
 ## 14. Confirmation 
 
 ```html
-
+<!-- Insert footer script for Confirmation -->
 <script>
 (function() {
     "use strict";
@@ -3804,5 +3950,905 @@ async function redirectToCheckout(planType) {
     
 })();
 </script>
+
+
+<!-- Insert HEADER script for Confirmation -->
+ <script>
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('preview') === 'true') {
+  console.log('Edit mode - bypassing protection');
+} else if (!localStorage.getItem('dataReadyForSupabase')) {
+  window.location.replace('https://www.iqcalorie.com/landing');
+}
+</script>
+
+
+<!-- Insert CSS FOOTER script for Confirmation -->
+.timeline-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 10px;
+}
+
+#timeline-step1 {
+  width: 12px;
+  height: 12px;
+  background-color: #FF6600; /* orange dot */
+  border-radius: 50%;
+  margin: 50px 0px 10px;
+}
+
+#timeline-step2 {
+  width: 12px;
+  height: 12px;
+  background-color: #FF6600; /* orange dot */
+  border-radius: 50%;
+  margin: 10px 0px 10px;
+}
+
+#timeline-step2 {
+  width: 12px;
+  height: 12px;
+  background-color: #FF6600; /* orange dot */
+  border-radius: 50%;
+  margin: 10px 0px 10px;
+}
+
+#timeline-step3 {
+  width: 12px;
+  height: 12px;
+  background-color: #FF6600; /* orange dot */
+  border-radius: 50%;
+  margin: 10px 0px 10px;
+}
+
+#timeline-step4 {
+  width: 12px;
+  height: 12px;
+  background-color: #FF6600; /* orange dot */
+  border-radius: 50%;
+  margin: 10px 0px 10px;
+}
+
+.timeline-connector {
+  width: 2px;
+  height: 115px;
+  background-color: #FF6600;
+}
+
+.gradient-line {
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(to right, #ff6600, rgba(255, 102, 0, 0));
+  margin-top: 23px; /* adjust to align with headline */
+}
+
+#button1, #button2, #button3, #button4 {
+  margin-right: -0px;
+}
+
+@media screen and (max-width: 768px) {
+  .timeline-line {
+    display: none;
+  }
+}
+
+#openWhatsapp {
+  padding: 5px 32px;
+  color: white;
+  font-weight: bold;
+  font-size: 16px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  background: linear-gradient(135deg, #4A00E0, #8E2DE2); /* blue to purple */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+/* Shine Animation */
+#openWhatsapp::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -75%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    120deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: skewX(-20deg);
+  animation: shine 2.5s infinite;
+  pointer-events: none; /* So it doesn't interfere with clicks */
+}
+
+@keyframes shine {
+  0% {
+    left: -75%;
+  }
+  100% {
+    left: 125%;
+  }
+}
+
+#proTip i{
+  color: #ff6600;
+}
+
+#proTipRow {
+  margin-left: 5px;
+}
+
+#accountActivated a {
+  background: linear-gradient(135deg, #ff7300, #ffbb00); /* orange to golden-yellow */
+  
+}
+
+## 15. User Dashboard
+
+```html
+<!-- Insert footer script for User Dashboard -->
+```
+<script>
+(function() {
+  'use strict';
+  
+  // Configuration
+  const API_BASE = 'https://bass-ethical-piranha.ngrok-free.app';
+  
+  // Field mapping: display label → database column
+  const FIELD_MAP = {
+    'First Name': 'first_name',
+    'Last Name': 'last_name',
+    'Email': 'email',
+    'Phone': 'phone_number',
+    'Gender': 'gender',
+    'Age': 'age',
+    'Height (cm)': 'height_cm',
+    'Weight (kg)': 'weight_kg',
+    'Target Weight (kg)': 'target_weight_kg',
+    'Measurement System': 'measurement_system',
+    'Activity Level': 'activity_level',
+    'Fitness Goal': 'fitness_goal',
+    'Diet Preference': 'diet_preference',
+    'Custom Diet Preference': 'diet_preference_custom',
+    'Weekly Weight Goal (kg)': 'weekly_weight_goal',
+    'Calories Goal': 'kcal_goal',
+    'Protein Goal (g)': 'prot_goal',
+    'Carbs Goal (g)': 'carb_goal',
+    'Fat Goal (g)': 'fat_goal',
+    'Status': 'stripe_subscription_id',
+    'Stripe Customer ID': 'stripe_customer_id',
+    'Stripe Subscription ID': 'stripe_subscription_id',
+    'Date Joined': 'created_at'
+  };
+  
+  // Field sections for organization
+  const SECTIONS = {
+    'Personal Info': ['First Name', 'Last Name', 'Email', 'Phone', 'Gender', 'Age'],
+    'Physical Stats': ['Height (cm)', 'Weight (kg)', 'Target Weight (kg)', 'Measurement System', 'Activity Level'],
+    'Goals': ['Fitness Goal', 'Diet Preference', 'Custom Diet Preference', 'Weekly Weight Goal (kg)'],
+    'Target Macros': ['Calories Goal', 'Protein Goal (g)', 'Carbs Goal (g)', 'Fat Goal (g)'],
+    'Subscription & Metadata': ['Status', 'Stripe Customer ID', 'Stripe Subscription ID', 'Date Joined']
+  };
+  
+  // Read-only fields
+  const READONLY_FIELDS = ['Phone', 'Status', 'Stripe Customer ID', 'Stripe Subscription ID', 'Date Joined'];
+  
+  // Select options for dropdown fields
+  const SELECT_OPTIONS = {
+    'gender': [
+      { value: 'male', text: 'Male' },
+      { value: 'female', text: 'Female' }
+    ],
+    'measurement_system': [
+      { value: 'metric', text: 'Metric' },
+      { value: 'imperial', text: 'Imperial' }
+    ],
+    'activity_level': [
+      { value: 'sedentary', text: 'Sedentary' },
+      { value: 'lightly_active', text: 'Lightly Active' },
+      { value: 'moderately_active', text: 'Moderately Active' },
+      { value: 'very_active', text: 'Very Active' },
+      { value: 'active', text: 'Active' }
+    ],
+    'fitness_goal': [
+      { value: 'lose_weight', text: 'Lose Weight' },
+      { value: 'maintain_weight', text: 'Maintain Weight' },
+      { value: 'gain_weight', text: 'Gain Weight' }
+    ],
+    'diet_preference': [
+  { value: 'everything', text: 'Everything' },
+  { value: 'mediterranean', text: 'Mediterranean' },
+  { value: 'keto', text: 'Keto' },
+  { value: 'paleo', text: 'Paleo' },
+  { value: 'vegan', text: 'Vegan' },
+  { value: 'dash', text: 'DASH' },
+  { value: 'lowCarb', text: 'Low Carb' },
+  { value: 'intermittentFasting', text: 'Intermittent Fasting' },
+  { value: 'glutenFree', text: 'Gluten-Free' },
+  { value: 'flexitarian', text: 'Flexitarian' },
+  { value: 'other', text: 'Other' }
+]
+  };
+  
+  let userData = {};
+  let currentUserPhone = null;
+  
+  // Get user phone from URL parameter
+  function getUserPhone() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const phoneFromUrl = urlParams.get('phone');
+    
+    if (phoneFromUrl) {
+      console.log('📱 Phone from URL:', phoneFromUrl);
+      return phoneFromUrl;
+    }
+    
+    return null;
+  }
+  
+  // Initialize dashboard
+  function init() {
+    console.log('🚀 Dashboard initializing...');
+    
+    setTimeout(function() {
+      const container = document.getElementById('iqc-dashboard');
+      if (!container) {
+        console.error('❌ Dashboard container not found');
+        const backupContainer = document.querySelector('.iqc-scope');
+        if (backupContainer) {
+          backupContainer.id = 'iqc-dashboard';
+          console.log('✅ Found backup container');
+        } else {
+          console.error('❌ No container found at all');
+          return;
+        }
+      }
+      
+      currentUserPhone = getUserPhone();
+      if (!currentUserPhone) {
+        container.innerHTML = '<div class="iqc-error">Invalid access. Please use the dashboard link from your WhatsApp chat.</div>';
+        return;
+      }
+      
+      console.log('📱 Using phone:', currentUserPhone);
+      loadUser();
+    }, 1000);
+  }
+  
+// Load user data from API
+  async function loadUser() {
+    const container = document.getElementById('iqc-dashboard');
+    container.innerHTML = '<div class="iqc-loading">Loading profile...</div>';
+    
+    try {
+      console.log('🔍 DEBUG: currentUserPhone variable =', currentUserPhone);
+      console.log('🔄 Fetching user data from:', API_BASE + '/api/user/' + encodeURIComponent(currentUserPhone));
+      
+      const response = await fetch(API_BASE + '/api/user/' + encodeURIComponent(currentUserPhone), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('📡 Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Response error:', errorText);
+        throw new Error('Failed to load user data: ' + response.status);
+      }
+      
+      const data = await response.json();
+      console.log('✅ User data received:', data);
+      userData = data.user || {};
+      
+      renderDashboard();
+    } catch (error) {
+      console.error('Error loading user:', error);
+      container.innerHTML = '<div class="iqc-error">Error loading profile: ' + error.message + '</div>';
+    }
+  }
+  
+  // Render the dashboard
+  function renderDashboard() {
+    const container = document.getElementById('iqc-dashboard');
+    
+    let html = '<div class="iqc-header"><h1 class="iqc-title">Profile Dashboard</h1><p class="iqc-subtitle">View and edit your profile information</p></div>';
+    
+    // Render each section
+    Object.entries(SECTIONS).forEach(function(entry) {
+      const sectionName = entry[0];
+      const fields = entry[1];
+      
+      html += '<div class="iqc-section"><h3 class="iqc-section-title">' + sectionName + '</h3>';
+      
+      fields.forEach(function(fieldLabel) {
+  const fieldKey = FIELD_MAP[fieldLabel];
+  if (!fieldKey || userData[fieldKey] === undefined) return;
+  
+  // Special handling for Custom Diet Preference - only show if diet preference is 'other'
+  if (fieldLabel === 'Custom Diet Preference') {
+    const dietPreference = userData['diet_preference'];
+    if (!dietPreference || dietPreference !== 'other') {
+      return; // Skip this field if diet preference is not 'other'
+    }
+  }
+  
+  const isReadonly = READONLY_FIELDS.includes(fieldLabel);
+  const value = formatFieldValue(fieldKey, userData[fieldKey]);
+  
+  html += '<div class="iqc-row" data-field="' + fieldKey + '">' +
+          '<div class="iqc-label">' + fieldLabel + ':</div>' +
+          '<div class="iqc-value">' + (isReadonly ? '<span class="iqc-readonly">' + value + '</span>' : value) + '</div>' +
+          '<div class="iqc-actions">' +
+          (!isReadonly ? '<button class="iqc-edit-btn" aria-label="Edit ' + fieldLabel + '">Edit</button>' : '') +
+          '</div></div>';
+});
+      
+      html += '</div>';
+    });
+    
+    // Add billing portal button at the end
+    html += `
+      <div class="iqc-billing-section">
+        <button id="iqc-billing-btn" class="iqc-billing-button">
+          Manage Subscription & Billing
+        </button>
+        <div id="iqc-billing-loading" class="iqc-billing-loading" style="display: none;">
+          Loading billing portal...
+        </div>
+        <div id="iqc-billing-error" class="iqc-billing-error" style="display: none;"></div>
+      </div>
+    `;
+    
+    container.innerHTML = html;
+    
+    // Add event listeners
+    addEventListeners();
+  }
+  
+  // Format field values for display
+  function formatFieldValue(fieldKey, value) {
+    if (value === null || value === undefined || value === '') {
+      return '<em>Not set</em>';
+    }
+    
+    switch (fieldKey) {
+      case 'stripe_subscription_id':
+        return value ? 'Active' : 'Inactive';
+      case 'created_at':
+        return new Date(value).toLocaleDateString();
+      case 'measurement_system':
+        return value === 'metric' ? 'Metric' : 'Imperial';
+      case 'gender':
+        return value.charAt(0).toUpperCase() + value.slice(1);
+      case 'activity_level':
+        return value.replace(/_/g, ' ').replace(/\\b\\w/g, function(l) { return l.toUpperCase(); });
+      case 'fitness_goal':
+        return value.replace(/_/g, ' ').replace(/\\b\\w/g, function(l) { return l.toUpperCase(); });
+      case 'diet_preference':
+        // Handle special cases first
+        if (value === 'lowCarb') return 'Low Carb';
+        if (value === 'intermittentFasting') return 'Intermittent Fasting';
+        if (value === 'glutenFree') return 'Gluten-Free';
+        if (value === 'dash') return 'DASH';
+        if (value === 'other') return 'Other';
+        // Handle regular cases
+        return value.replace(/_/g, ' ').replace(/\b\w/g, function(l) { return l.toUpperCase(); });
+      default:
+        return String(value);
+    }
+  }
+  
+  // Add event listeners
+  function addEventListeners() {
+    const container = document.getElementById('iqc-dashboard');
+    
+    // Billing portal button click
+    container.addEventListener('click', function(e) {
+      if (e.target.id === 'iqc-billing-btn') {
+        handleBillingPortal();
+        return;
+      }
+    });
+    
+    // Edit button clicks
+    container.addEventListener('click', function(e) {
+      if (e.target.classList.contains('iqc-edit-btn')) {
+        const row = e.target.closest('.iqc-row');
+        const fieldKey = row.dataset.field;
+        enterEdit(fieldKey);
+      }
+      
+      if (e.target.classList.contains('iqc-save-btn')) {
+        const row = e.target.closest('.iqc-row');
+        const fieldKey = row.dataset.field;
+        const input = row.querySelector('.iqc-input, .iqc-select');
+        saveField(fieldKey, input.value);
+      }
+      
+      if (e.target.classList.contains('iqc-cancel-btn')) {
+        const row = e.target.closest('.iqc-row');
+        const fieldKey = row.dataset.field;
+        exitEdit(fieldKey);
+      }
+    });
+    
+    container.addEventListener('keydown', function(e) {
+      if (e.target.classList.contains('iqc-input') || e.target.classList.contains('iqc-select')) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const row = e.target.closest('.iqc-row');
+          const fieldKey = row.dataset.field;
+          saveField(fieldKey, e.target.value);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          const row = e.target.closest('.iqc-row');
+          const fieldKey = row.dataset.field;
+          exitEdit(fieldKey);
+        }
+      }
+    });
+  }
+  
+  // Enter edit mode for a field
+  function enterEdit(fieldKey) {
+    const row = document.querySelector('[data-field="' + fieldKey + '"]');
+    const valueDiv = row.querySelector('.iqc-value');
+    const actionsDiv = row.querySelector('.iqc-actions');
+    
+    const currentValue = userData[fieldKey] || '';
+    const selectOptions = SELECT_OPTIONS[fieldKey];
+    
+    let inputHtml;
+    if (selectOptions) {
+      inputHtml = '<select class="iqc-select">';
+      selectOptions.forEach(function(option) {
+        const selected = option.value === currentValue ? 'selected' : '';
+        inputHtml += '<option value="' + option.value + '" ' + selected + '>' + option.text + '</option>';
+      });
+      inputHtml += '</select>';
+    } else {
+      const inputType = isNumberField(fieldKey) ? 'number' : 'text';
+      inputHtml = '<input type="' + inputType + '" class="iqc-input" value="' + currentValue + '" />';
+    }
+    
+    valueDiv.innerHTML = inputHtml;
+    actionsDiv.innerHTML = '<button class="iqc-save-btn">Save</button><button class="iqc-cancel-btn">Cancel</button>';
+    
+    const input = valueDiv.querySelector('.iqc-input, .iqc-select');
+    if (input) {
+      input.focus();
+      if (input.type === 'text') {
+        input.select();
+      }
+    }
+  }
+  
+  // Exit edit mode
+  function exitEdit(fieldKey) {
+    const row = document.querySelector('[data-field="' + fieldKey + '"]');
+    const valueDiv = row.querySelector('.iqc-value');
+    const actionsDiv = row.querySelector('.iqc-actions');
+    
+    const value = formatFieldValue(fieldKey, userData[fieldKey]);
+    valueDiv.innerHTML = value;
+    actionsDiv.innerHTML = '<button class="iqc-edit-btn" aria-label="Edit ' + fieldKey + '">Edit</button>';
+  }
+  
+  // Save field value
+  async function saveField(fieldKey, newValue) {
+    const row = document.querySelector('[data-field="' + fieldKey + '"]');
+    
+    if (isNumberField(fieldKey)) {
+      const numValue = parseFloat(newValue);
+      if (isNaN(numValue) || numValue < 0) {
+        showError(row, 'Please enter a valid positive number');
+        return;
+      }
+      newValue = numValue;
+    }
+    
+    const existingError = row.querySelector('.iqc-error');
+    if (existingError) {
+      existingError.remove();
+    }
+    
+    try {
+      console.log('💾 Saving field:', fieldKey, '=', newValue);
+      
+      const requestBody = {};
+      requestBody[fieldKey] = newValue;
+      
+      const response = await fetch(API_BASE + '/api/user/' + encodeURIComponent(currentUserPhone), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      console.log('📡 Save response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Save error:', errorText);
+        throw new Error('Update failed: ' + response.status);
+      }
+      
+      const data = await response.json();
+      console.log('✅ Save successful:', data);
+      
+      userData[fieldKey] = newValue;
+exitEdit(fieldKey);
+toast('Profile updated successfully', 'success');
+
+// If diet preference was changed, re-render dashboard to show/hide custom diet preference field
+if (fieldKey === 'diet_preference') {
+  console.log('🔄 Diet preference changed, re-rendering dashboard...');
+  
+  // Clear custom diet preference if user switched away from "other"
+  if (newValue !== 'other' && userData['diet_preference_custom']) {
+    console.log('🧹 Clearing custom diet preference since diet preference is no longer "other"');
+    
+    // Clear it in the database
+    fetch(API_BASE + '/api/user/' + encodeURIComponent(currentUserPhone), {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        diet_preference_custom: null
+      })
+    }).then(function(response) {
+      if (response.ok) {
+        console.log('✅ Custom diet preference cleared in database');
+        userData['diet_preference_custom'] = null;
+      }
+    }).catch(function(error) {
+      console.error('❌ Failed to clear custom diet preference:', error);
+    });
+  }
+  
+  setTimeout(function() {
+    renderDashboard();
+  }, 500);
+}
+      
+    } catch (error) {
+      console.error('Error saving field:', error);
+      showError(row, 'Failed to save: ' + error.message);
+    }
+  }
+  
+  // Check if field should be treated as number
+  function isNumberField(fieldKey) {
+    return ['age', 'height_cm', 'weight_kg', 'target_weight_kg', 'weekly_weight_goal', 'kcal_goal', 'prot_goal', 'carb_goal', 'fat_goal'].includes(fieldKey);
+  }
+  
+  // Show inline error
+  function showError(row, message) {
+    let errorDiv = row.querySelector('.iqc-error');
+    if (!errorDiv) {
+      errorDiv = document.createElement('div');
+      errorDiv.className = 'iqc-error';
+      row.appendChild(errorDiv);
+    }
+    errorDiv.textContent = message;
+  }
+  
+  // Show toast notification
+  function toast(message, type) {
+    type = type || 'success';
+    const toast = document.createElement('div');
+    toast.className = 'iqc-toast ' + type;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(function() { 
+      toast.classList.add('show'); 
+    }, 100);
+    
+    setTimeout(function() {
+      toast.classList.remove('show');
+      setTimeout(function() {
+        if (toast.parentNode) {
+          toast.parentNode.removeChild(toast);
+        }
+      }, 300);
+    }, 3000);
+  }
+  
+  // Handle billing portal button click
+  async function handleBillingPortal() {
+    const billingBtn = document.getElementById('iqc-billing-btn');
+    const loadingDiv = document.getElementById('iqc-billing-loading');
+    const errorDiv = document.getElementById('iqc-billing-error');
+    
+    // Show loading state
+    billingBtn.disabled = true;
+    billingBtn.textContent = 'Loading...';
+    loadingDiv.style.display = 'block';
+    errorDiv.style.display = 'none';
+    
+    try {
+      console.log('🔗 Requesting billing portal for:', currentUserPhone);
+      
+      const response = await fetch(API_BASE + '/api/billing-portal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          phone_number: currentUserPhone
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success && data.url) {
+        console.log('✅ Billing portal URL received');
+        // Open billing portal in new tab
+        window.open(data.url, '_blank');
+      } else {
+        throw new Error(data.message || 'Failed to create billing portal');
+      }
+      
+    } catch (error) {
+      console.error('❌ Billing portal error:', error);
+      let errorMessage = 'Unable to access billing portal. Please try again.';
+      
+      if (error.message && error.message.includes('not set up')) {
+        errorMessage = 'Billing portal is not available yet. Please contact support for subscription management.';
+      }
+      
+      errorDiv.textContent = errorMessage;
+      errorDiv.style.display = 'block';
+    } finally {
+      // Reset button state
+      billingBtn.disabled = false;
+      billingBtn.textContent = 'Manage Subscription & Billing';
+      loadingDiv.style.display = 'none';
+    }
+  }
+  
+  // Initialize when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+  
+})();
+</script>
+
+<!-- Insert CSS script for User Dashboard -->
+.iqc-scope {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.iqc-scope .iqc-header {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.iqc-scope .iqc-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0 0 10px 0;
+}
+
+.iqc-scope .iqc-subtitle {
+  color: #6c757d;
+  margin: 0;
+}
+
+.iqc-scope .iqc-section {
+  background: white;
+  margin-bottom: 20px;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.iqc-scope .iqc-section-title {
+  background: #e9ecef;
+  padding: 12px 16px;
+  font-weight: 600;
+  color: #495057;
+  margin: 0;
+  font-size: 16px;
+}
+
+.iqc-scope .iqc-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #dee2e6;
+  min-height: 48px;
+}
+
+.iqc-scope .iqc-row:last-child {
+  border-bottom: none;
+}
+
+.iqc-scope .iqc-label {
+  flex: 1;
+  font-weight: 500;
+  color: #495057;
+}
+
+.iqc-scope .iqc-value {
+  flex: 2;
+  color: #212529;
+}
+
+.iqc-scope .iqc-actions {
+  flex: 0 0 auto;
+  margin-left: 10px;
+}
+
+.iqc-scope .iqc-edit-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.iqc-scope .iqc-edit-btn:hover {
+  background: #0056b3;
+}
+
+.iqc-scope .iqc-save-btn {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-right: 5px;
+}
+
+.iqc-scope .iqc-cancel-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.iqc-scope .iqc-input {
+  flex: 2;
+  padding: 6px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.iqc-scope .iqc-select {
+  flex: 2;
+  padding: 6px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 14px;
+  background: white;
+}
+
+.iqc-scope .iqc-error {
+  background: #f8d7da;
+  color: #721c24;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+.iqc-scope .iqc-loading {
+  text-align: center;
+  padding: 40px;
+  color: #6c757d;
+}
+
+.iqc-scope .iqc-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 16px;
+  border-radius: 4px;
+  color: white;
+  font-weight: 500;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.iqc-scope .iqc-toast.success {
+  background: #28a745;
+}
+
+.iqc-scope .iqc-toast.error {
+  background: #dc3545;
+}
+
+.iqc-scope .iqc-toast.show {
+  opacity: 1;
+}
+
+.iqc-scope .iqc-readonly {
+  color: #6c757d;
+  font-style: italic;
+}
+
+.iqc-scope .iqc-billing-section {
+  margin-top: 30px;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  text-align: center;
+  
+}
+
+.iqc-scope .iqc-billing-button {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0,123,255,0.2);
+}
+
+.iqc-scope .iqc-billing-button:hover {
+  background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0,123,255,0.3);
+}
+
+.iqc-scope .iqc-billing-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.iqc-scope .iqc-billing-loading {
+  color: #007bff;
+  font-style: italic;
+  margin-top: 10px;
+}
+
+.iqc-scope .iqc-billing-error {
+  color: #dc3545;
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+
 
 
