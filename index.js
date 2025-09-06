@@ -170,8 +170,8 @@ const getCachedUserProfile = async (phone) => {
       // Cache miss - fetch from Supabase and cache
       const profile = await fetchUserProfileFromSupabase(phone);
       if (profile) {
-        // Cache for 6 hours
-        await redisClient.setEx(profileKey, 21600, JSON.stringify(profile));
+        // Cache for 2 hours (with auto-invalidation on updates)
+        await redisClient.setEx(profileKey, 7200, JSON.stringify(profile));
         console.log('📦 Cached user profile for:', phone);
       }
       return profile;
@@ -209,9 +209,16 @@ const invalidateUserProfileCache = async (phone) => {
   if (!redisClient) return;
   
   try {
-    const profileKey = `user_profile:${phone}`;
-    await redisClient.del(profileKey);
-    console.log('🗑️ User profile cache invalidated for:', phone);
+    const normalizedPhone = normalizePhoneNumber(phone);
+    const profileKey = `user_profile:${normalizedPhone}`;
+    
+    const deleted = await redisClient.del(profileKey);
+    
+    if (deleted > 0) {
+      console.log('✅ User profile cache invalidated for:', normalizedPhone);
+    } else {
+      console.log('⚠️ No cache found to invalidate for:', normalizedPhone);
+    }
   } catch (error) {
     console.error('❌ Error invalidating cache:', error);
   }
@@ -1719,6 +1726,10 @@ app.post('/complete-user-setup', async (req, res) => {
         details: 'No user data returned' 
       });
     }
+
+    // Invalidate cache for new/updated users
+    await invalidateUserProfileCache(finalPhoneNumber);
+    console.log('🔄 Cache invalidated for new/updated user');
     
     console.log('✅ User successfully created/updated in Supabase:', data[0]);
     
@@ -1786,6 +1797,8 @@ app.put('/api/user/:phone', async (req, res) => {
   
   try {
     const phoneNumber = req.params.phone;
+    console.log('🔧 DEBUG: Raw phone from URL params:', phoneNumber);
+    console.log('🔧 DEBUG: Request body received:', req.body);
     const updatedData = req.body;
     
     // Remove phone_number from update data to prevent changes
@@ -1832,6 +1845,11 @@ app.put('/api/user/:phone', async (req, res) => {
         // Don't fail the entire request if Stripe sync fails
       }
     }
+
+    // 🔄 INVALIDATE USER PROFILE CACHE AFTER UPDATE
+    console.log('🔧 DEBUG: About to invalidate cache for phone:', phoneNumber);
+    await invalidateUserProfileCache(phoneNumber);
+    console.log('✅ Profile cache invalidated after dashboard update for:', phoneNumber);
     
     console.log('✅ User updated successfully');
     res.json({ 
