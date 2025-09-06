@@ -918,6 +918,25 @@ Available commands:
     const goals = { kcal: row.kcal_goal, prot: row.prot_goal, carb: row.carb_goal, fat: row.fat_goal };
     const used = { kcal: row.kcal_used, prot: row.prot_used, carb: row.carb_used, fat: row.fat_used };
 
+    // ============================================================================
+    // UPDATE CONVERSATION HISTORY BEFORE AI CALL (so AI can see previous exchange)
+    // ============================================================================
+    
+    if (userSession && text) {
+      // Add PREVIOUS bot response to history (if this isn't the first message)
+      // This ensures the AI can see what it just said when user responds
+      
+      console.log('📝 Pre-AI conversation update - Current history length:', userSession.conversationHistory.length);
+      
+      // The current user message will be added after we get the bot response
+      // For now, just ensure session is up to date with previous exchanges
+      await updateUserSession(phone, userSession);
+    }
+
+    console.log('💰 MAKING OPENAI API CALL - This will cost money');
+    console.log(`   - User: ${phone}`);
+    console.log(`   - Message tokens: ~${JSON.stringify(msgs).length / 4}`);
+
     console.log('💰 MAKING OPENAI API CALL - This will cost money');
     console.log(`   - User: ${phone}`);
     console.log(`   - Message tokens: ~${JSON.stringify(msgs).length / 4}`);
@@ -934,6 +953,28 @@ Available commands:
 
     let reply = gpt.data.choices[0].message.content;
     console.log('🧾 GPT raw reply:\n', reply);
+
+    // ============================================================================
+    // UPDATE CONVERSATION HISTORY WITH CURRENT EXCHANGE
+    // ============================================================================
+    
+    if (userSession) {
+      // Add this exchange to conversation history
+      userSession.conversationHistory.push({
+        timestamp: new Date().toISOString(),
+        userMessage: text || (isImg ? '[image]' : '[audio]'),
+        botResponse: reply,
+        messageType: isImg ? 'image' : (isAudio ? 'audio' : 'text'),
+        macrosLogged: null
+      });
+      
+      // Keep only last 10 exchanges to manage memory
+      if (userSession.conversationHistory.length > 10) {
+        userSession.conversationHistory = userSession.conversationHistory.slice(-10);
+      }
+      
+      console.log('📝 Conversation history updated with current exchange - Length:', userSession.conversationHistory.length);
+    }
 
     // Check for update/delete requests first
     const userMessage = text.toLowerCase();
@@ -1255,28 +1296,10 @@ Anything else I can help you with${personalGreeting}?`;
     twiml.message(reply);
     console.log('💬 Final reply sent.');
     
-    // ============================================================================
-    // UPDATE CONVERSATION CONTEXT AFTER RESPONSE
-    // ============================================================================
-    
+    // Save updated session to Redis
     if (userSession) {
-      // Add this exchange to conversation history
-      userSession.conversationHistory.push({
-        timestamp: new Date().toISOString(),
-        userMessage: text || (isImg ? '[image]' : '[audio]'),
-        botResponse: reply,
-        messageType: isImg ? 'image' : (isAudio ? 'audio' : 'text'),
-        macrosLogged: null // Will be populated by LangChain tools later
-      });
-      
-      // Keep only last 10 exchanges to manage memory
-      if (userSession.conversationHistory.length > 10) {
-        userSession.conversationHistory = userSession.conversationHistory.slice(-10);
-      }
-      
-      // Update session in Redis
       await updateUserSession(phone, userSession);
-      console.log('📝 Conversation context updated - History length:', userSession.conversationHistory.length);
+      console.log('💾 Final session save completed');
     }
     
     res.type('text/xml').send(twiml.toString());
