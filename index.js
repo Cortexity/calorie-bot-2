@@ -11,6 +11,213 @@ const { createClient } = require('@supabase/supabase-js');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // ============================================================================
+// REDIS SETUP FOR CONVERSATION MEMORY
+// ============================================================================
+const redis = require('redis');
+
+let redisClient;
+const initializeRedis = async () => {
+  try {
+    redisClient = redis.createClient({
+      url: process.env.REDIS_URL || 'redis://localhost:6379'
+    });
+    
+    await redisClient.connect();
+    console.log('🧠 Redis connected successfully');
+    
+    // Test Redis functionality
+    await redisClient.set('test_key', 'Redis working!');
+    const testValue = await redisClient.get('test_key');
+    console.log('🔧 Redis test:', testValue);
+    
+  } catch (error) {
+    console.error('❌ Redis connection failed:', error);
+    console.log('⚠️ Continuing without Redis - bot will be stateless');
+    redisClient = null;
+  }
+};
+
+// Initialize Redis on startup
+initializeRedis();
+
+// ============================================================================
+// PHONE NUMBER NORMALIZATION
+// ============================================================================
+
+// Normalize phone number format for consistent Redis keys
+const normalizePhoneNumber = (phone) => {
+  // Remove all non-digit characters except +
+  let normalized = phone.replace(/[^\d+]/g, '');
+  
+  // Ensure it starts with +
+  if (!normalized.startsWith('+')) {
+    normalized = '+' + normalized;
+  }
+  
+  console.log('📞 Phone normalized:', phone, '->', normalized);
+  return normalized;
+};
+
+// ============================================================================
+// SESSION MANAGEMENT FUNCTIONS
+// ============================================================================
+
+// Generate unique session ID for each user
+const generateSessionId = (phone) => {
+  return `session:${phone}:${Date.now()}`;
+};
+
+// Get or create user session
+const getUserSession = async (phone) => {
+  if (!redisClient) {
+    console.log('❌ Redis client not available - no session management');
+    return null;
+  }
+  
+  try {
+    const sessionKey = `user_session:${phone}`;
+    console.log('🔍 Looking for session key:', sessionKey);
+    
+    const sessionData = await redisClient.get(sessionKey);
+    console.log('📦 Raw session data from Redis:', sessionData ? 'Found data' : 'No data found');
+    
+    if (sessionData) {
+      const parsed = JSON.parse(sessionData);
+      console.log('🔄 Retrieved existing session for:', phone);
+      console.log('📝 Session details:', {
+        sessionId: parsed.sessionId,
+        historyLength: parsed.conversationHistory?.length || 0,
+        activeIntent: parsed.activeIntent,
+        startTime: parsed.startTime
+      });
+      return parsed;
+    } else {
+      // Create new session
+      const newSession = {
+        sessionId: generateSessionId(phone),
+        phone: phone,
+        startTime: new Date().toISOString(),
+        conversationHistory: [],
+        activeIntent: null,
+        pendingDetails: {},
+        gatheredParams: {},
+        lastBotAssumption: null
+      };
+      
+      // Store session with 24-hour expiry
+      await redisClient.setEx(sessionKey, 86400, JSON.stringify(newSession));
+      console.log('✨ Created new session for:', phone);
+      return newSession;
+    }
+  } catch (error) {
+    console.error('❌ Error managing user session:', error);
+    return null;
+  }
+};
+
+// Update user session
+const updateUserSession = async (phone, sessionData) => {
+  if (!redisClient) {
+    console.log('❌ Redis client not available - cannot update session');
+    return false;
+  }
+  
+  try {
+    const sessionKey = `user_session:${phone}`;
+    const serializedData = JSON.stringify(sessionData);
+    
+    console.log('💾 Updating session for:', phone);
+    console.log('📊 Session data size:', serializedData.length, 'characters');
+    console.log('📝 Conversation history length:', sessionData.conversationHistory?.length || 0);
+    
+    await redisClient.setEx(sessionKey, 86400, serializedData);
+    
+    // Verify the data was stored
+    const verification = await redisClient.get(sessionKey);
+    if (verification) {
+      console.log('✅ Session successfully stored and verified');
+      return true;
+    } else {
+      console.log('❌ Session storage verification failed');
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error updating session:', error);
+    console.error('Error details:', error.message);
+    return false;
+  }
+};
+
+// ============================================================================
+// USER PROFILE CACHING SYSTEM
+// ============================================================================
+
+// Get cached user profile with fallback to Supabase
+const getCachedUserProfile = async (phone) => {
+  if (!redisClient) {
+    // No Redis - fetch directly from Supabase
+    return await fetchUserProfileFromSupabase(phone);
+  }
+  
+  try {
+    const profileKey = `user_profile:${phone}`;
+    const cachedProfile = await redisClient.get(profileKey);
+    
+    if (cachedProfile) {
+      console.log('⚡ Retrieved cached profile for:', phone);
+      return JSON.parse(cachedProfile);
+    } else {
+      // Cache miss - fetch from Supabase and cache
+      const profile = await fetchUserProfileFromSupabase(phone);
+      if (profile) {
+        // Cache for 6 hours
+        await redisClient.setEx(profileKey, 21600, JSON.stringify(profile));
+        console.log('📦 Cached user profile for:', phone);
+      }
+      return profile;
+    }
+  } catch (error) {
+    console.error('❌ Error with profile caching:', error);
+    return await fetchUserProfileFromSupabase(phone);
+  }
+};
+
+// Fetch user profile from Supabase
+const fetchUserProfileFromSupabase = async (phone) => {
+  try {
+    const { data, error } = await db
+      .from('users')
+      .select('*')
+      .eq('phone_number', phone)
+      .single();
+    
+    if (error || !data) {
+      console.log('❌ User profile not found in Supabase:', phone);
+      return null;
+    }
+    
+    console.log('✅ User profile fetched from Supabase');
+    return data;
+  } catch (error) {
+    console.error('❌ Error fetching user profile:', error);
+    return null;
+  }
+};
+
+// Invalidate user profile cache (call after profile updates)
+const invalidateUserProfileCache = async (phone) => {
+  if (!redisClient) return;
+  
+  try {
+    const profileKey = `user_profile:${phone}`;
+    await redisClient.del(profileKey);
+    console.log('🗑️ User profile cache invalidated for:', phone);
+  } catch (error) {
+    console.error('❌ Error invalidating cache:', error);
+  }
+};
+
+// ============================================================================
 // DAILY RESET SCHEDULER
 // ============================================================================
 
@@ -409,7 +616,9 @@ app.post('/webhook', async (req, res) => {
     From: from, Body: bodyText.slice(0, 50), Img: isImg, Audio: isAudio
   });
 
-  const phone = from.replace('whatsapp:', '');
+  const rawPhone = from.replace('whatsapp:', '');
+  const phone = normalizePhoneNumber(rawPhone);
+  console.log('📞 Phone normalization:', rawPhone, '->', phone);
   
   // 🔒 SECURITY CHECK: Verify user authorization FIRST
   const authResult = await verifyUserAuthorization(phone);
@@ -433,23 +642,59 @@ app.post('/webhook', async (req, res) => {
   console.log(`   - Phone: ${phone}`);
   console.log(`   - User ID: ${authResult.user.id}`);
 
-  // Get user's first name for personalization
-  let userFirstName = null;
-  try {
-    const { data: userDetails, error: nameError } = await db
-      .from('users')
-      .select('first_name')
-      .eq('phone_number', phone)
-      .limit(1);
-    
-    if (userDetails && userDetails[0] && userDetails[0].first_name) {
-      userFirstName = userDetails[0].first_name;
-      console.log('👋 User first name retrieved:', userFirstName);
-    } else {
-      console.log('🔍 No first name found for user');
+  // ============================================================================
+  // INTELLIGENT SESSION & CONTEXT MANAGEMENT WITH CACHING
+  // ============================================================================
+  
+  // Initialize conversation context with cached profile
+  let userSession = await getUserSession(phone);
+  let userProfile = await getCachedUserProfile(phone);
+  
+  console.log('🧠 CONTEXT LOADED:', {
+    hasSession: !!userSession,
+    hasProfile: !!userProfile,
+    activeIntent: userSession?.activeIntent,
+    conversationLength: userSession?.conversationHistory?.length || 0,
+    userName: userProfile?.first_name || 'Unknown'
+  });
+
+  // Debug conversation history content
+  if (userSession?.conversationHistory && userSession.conversationHistory.length > 0) {
+    console.log('📚 CONVERSATION HISTORY DEBUG:');
+    userSession.conversationHistory.slice(-2).forEach((exchange, index) => {
+      console.log(`  ${index + 1}. User: "${exchange.userMessage}"`);
+      console.log(`     Bot: "${exchange.botResponse.substring(0, 100)}..."`);
+    });
+  }
+
+  // ============================================================================
+  // REDIS HEALTH CHECK & SESSION DEBUG
+  // ============================================================================
+  
+  // Check Redis connection health
+  if (redisClient) {
+    try {
+      await redisClient.ping();
+      console.log('💚 Redis connection healthy');
+      
+      // List all session keys for debugging
+      const allKeys = await redisClient.keys('user_session:*');
+      console.log('🗄️ Total sessions in Redis:', allKeys.length);
+      console.log('🔑 Session keys:', allKeys);
+      
+    } catch (redisError) {
+      console.error('💔 Redis connection issue:', redisError);
     }
-  } catch (error) {
-    console.log('⚠️ Error fetching user name:', error);
+  } else {
+    console.log('💔 Redis client is null - sessions disabled');
+  }
+
+  // Get user's first name from cached profile (faster than separate DB query)
+  let userFirstName = userProfile?.first_name || null;
+  if (userFirstName) {
+    console.log('⚡ User first name from cache:', userFirstName);
+  } else {
+    console.log('🔍 No first name found in cached profile');
   }
 
   let text = bodyText.trim();
@@ -553,14 +798,52 @@ Available commands:
       }
     }
 
+    // ============================================================================
+    // BUILD CONTEXT-AWARE PROMPT WITH CONVERSATION HISTORY
+    // ============================================================================
+    
+    // Build conversation history context
+    let conversationContext = '';
+    if (userSession?.conversationHistory && userSession.conversationHistory.length > 0) {
+      conversationContext = '\n\nRECENT CONVERSATION HISTORY (for context and continuity):';
+      
+      // Show last 3 exchanges for context
+      const recentExchanges = userSession.conversationHistory.slice(-3);
+      recentExchanges.forEach((exchange, index) => {
+        conversationContext += `\n\nExchange ${index + 1}:`;
+        conversationContext += `\nUser said: "${exchange.userMessage}"`;
+        conversationContext += `\nYou responded: "${exchange.botResponse.substring(0, 200)}..."`;
+      });
+      
+      conversationContext += '\n\nIMPORTANT: Use this conversation history to understand context. If the user says "yes", "no", "sure", "okay", etc., refer to what you just asked them about.';
+      
+      console.log('🧠 Including conversation history:', userSession.conversationHistory.length, 'exchanges');
+      console.log('📝 Conversation context preview:', conversationContext.substring(0, 300) + '...');
+    } else {
+      console.log('🔍 No conversation history available');
+    }
+    
+    // Build user profile context
+    let userContext = '';
+    if (userProfile) {
+      userContext = `\n\nUSER PROFILE:
+- Name: ${userProfile.first_name || 'Unknown'}
+- Diet Preference: ${userProfile.diet_preference || 'None specified'}
+- Fitness Goal: ${userProfile.fitness_goal || 'Not specified'}
+- Activity Level: ${userProfile.activity_level || 'Unknown'}`;
+      console.log('👤 Including user profile context');
+    }
+
     // Build conversational system prompt with personalization
     const nameContext = userFirstName 
       ? `The user's name is ${userFirstName}. Use their name naturally in greetings and when appropriate, but don't overuse it.` 
       : ``;
 
-      const msgs = [{
+    const msgs = [{
       role: 'system',
-      content: `You are an expert nutrition tracking assistant for the IQ Calorie Whatsapp app. You specialize in analyzing food and providing accurate macro breakdowns. ${nameContext} 
+      content: `You are an expert nutrition tracking assistant for the IQ Calorie Whatsapp app. You specialize in analyzing food and providing accurate macro breakdowns. ${nameContext}${userContext}${conversationContext}
+      
+      IMPORTANT: You have access to the conversation history above. Reference previous meals and conversations naturally. If the user asks about past meals or
       
       Core responsibilities:
       - Analyze food photos and descriptions to estimate calories and macros
@@ -580,7 +863,6 @@ Available commands:
       - When responding to questions that should NOT use the standardized meal format, break your answer into small, readable paragraphs
       - Keep paragraphs short (1-3 sentences each) for easy reading on mobile
       - Use natural, conversational language
-      - 
 
   When users send meal inputs, create a meal log using this format every time:
   
@@ -972,6 +1254,31 @@ Anything else I can help you with${personalGreeting}?`;
     
     twiml.message(reply);
     console.log('💬 Final reply sent.');
+    
+    // ============================================================================
+    // UPDATE CONVERSATION CONTEXT AFTER RESPONSE
+    // ============================================================================
+    
+    if (userSession) {
+      // Add this exchange to conversation history
+      userSession.conversationHistory.push({
+        timestamp: new Date().toISOString(),
+        userMessage: text || (isImg ? '[image]' : '[audio]'),
+        botResponse: reply,
+        messageType: isImg ? 'image' : (isAudio ? 'audio' : 'text'),
+        macrosLogged: null // Will be populated by LangChain tools later
+      });
+      
+      // Keep only last 10 exchanges to manage memory
+      if (userSession.conversationHistory.length > 10) {
+        userSession.conversationHistory = userSession.conversationHistory.slice(-10);
+      }
+      
+      // Update session in Redis
+      await updateUserSession(phone, userSession);
+      console.log('📝 Conversation context updated - History length:', userSession.conversationHistory.length);
+    }
+    
     res.type('text/xml').send(twiml.toString());
   } catch (err) {
     console.error('⚠️ Error in webhook:', err);
