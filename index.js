@@ -810,12 +810,12 @@ Available commands:
       // Show last 3 exchanges for context
       const recentExchanges = userSession.conversationHistory.slice(-3);
       recentExchanges.forEach((exchange, index) => {
-        conversationContext += `\n\nExchange ${index + 1}:`;
-        conversationContext += `\nUser said: "${exchange.userMessage}"`;
-        conversationContext += `\nYou responded: "${exchange.botResponse.substring(0, 200)}..."`;
+        conversationContext += `\n\n[${index + 1} exchanges ago]`;
+        conversationContext += `\nUser: "${exchange.userMessage}"`;
+        conversationContext += `\nYour response: "${exchange.botResponse.substring(0, 150)}..."`;
       });
       
-      conversationContext += '\n\nIMPORTANT: Use this conversation history to understand context. If the user says "yes", "no", "sure", "okay", etc., refer to what you just asked them about.';
+      conversationContext += '\n\nCONVERSATION RULES:\n- When user says "yes/no/sure/okay" - assume they mean your MOST RECENT question\n- Don\'t ask for clarification unless truly ambiguous\n- Be natural and conversational, not robotic\n- Don\'t say "I\'ll circle back" or "let me clarify" - just continue naturally';
       
       console.log('🧠 Including conversation history:', userSession.conversationHistory.length, 'exchanges');
       console.log('📝 Conversation context preview:', conversationContext.substring(0, 300) + '...');
@@ -843,7 +843,12 @@ Available commands:
       role: 'system',
       content: `You are an expert nutrition tracking assistant for the IQ Calorie Whatsapp app. You specialize in analyzing food and providing accurate macro breakdowns. ${nameContext}${userContext}${conversationContext}
       
-      IMPORTANT: You have access to the conversation history above. Reference previous meals and conversations naturally. If the user asks about past meals or
+      CONVERSATION STYLE:
+      - Be natural and conversational, like texting a an empathetic friend
+      - When users say "yes/no/sure/okay" - they usually mean your most recent question
+      - Don't over-clarify or say "let me circle back" - just continue the conversation
+      - Use the conversation history to understand context, don't repeatedly ask for clarification
+      - If something is genuinely unclear, ask once, then assume the most logical interpretation
       
       Core responsibilities:
       - Analyze food photos and descriptions to estimate calories and macros
@@ -968,9 +973,9 @@ Available commands:
         macrosLogged: null
       });
       
-      // Keep only last 10 exchanges to manage memory
-      if (userSession.conversationHistory.length > 10) {
-        userSession.conversationHistory = userSession.conversationHistory.slice(-10);
+      // Keep only last 5 exchanges to manage memory
+      if (userSession.conversationHistory.length > 5) {
+        userSession.conversationHistory = userSession.conversationHistory.slice(-5);
       }
       
       console.log('📝 Conversation history updated with current exchange - Length:', userSession.conversationHistory.length);
