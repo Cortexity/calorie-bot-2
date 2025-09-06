@@ -9,6 +9,13 @@ const FormData = require('form-data');
 const { MessagingResponse } = require('twilio').twiml;
 const { createClient } = require('@supabase/supabase-js');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+// Import OpenAI client for LangChain-style operations
+const { OpenAI } = require('openai');
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // ============================================================================
 // REDIS SETUP FOR CONVERSATION MEMORY
@@ -228,14 +235,22 @@ const invalidateUserProfileCache = async (phone) => {
 // DAILY RESET SCHEDULER
 // ============================================================================
 
-const cron = require('node-cron');
+let cron;
+try {
+  cron = require('node-cron');
+  console.log('✅ node-cron loaded successfully');
+} catch (error) {
+  console.log('⚠️ node-cron not installed - daily reset disabled');
+  cron = null;
+}
 
 // Schedule daily reset at midnight (00:00) every day
-cron.schedule('0 0 * * *', async () => {
-  console.log('🕛 DAILY RESET: Starting midnight reset at', new Date().toISOString());
+if (cron) {
+  cron.schedule('0 0 * * *', async () => {
+    console.log('🕛 DAILY RESET: Starting midnight reset at', new Date().toISOString());
   
-  try {
-    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
     
     // Reset all users' daily totals to zero
     const { data, error } = await db
@@ -264,6 +279,9 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 console.log('⏰ Daily reset scheduler initialized - will run at midnight UTC');
+} else {
+console.log('⚠️ Daily reset scheduler disabled - node-cron not available');
+}
 
 const app = express();
 app.use(express.json());
@@ -356,6 +374,192 @@ app.post('/cleanup-stripe-data', async (req, res) => {
     });
   }
 });
+
+// ============================================================================
+// LANGCHAIN INTENT CLASSIFICATION SYSTEM
+// ============================================================================
+
+// Tool schemas for intent classification
+const TOOL_SCHEMAS = {
+  add_meal: {
+    name: "add_meal",
+    description: "Log a new meal or food item for the user",
+    parameters: {
+      type: "object",
+      properties: {
+        user_id: { type: "string", description: "User's phone number" },
+        meal_type: { 
+          type: "string", 
+          enum: ["breakfast", "lunch", "dinner", "snack"],
+          description: "Type of meal" 
+        },
+        food_items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Food item name" },
+              quantity: { type: "number", description: "Quantity/amount" },
+              unit: { type: "string", description: "Unit of measurement (g, cups, pieces, etc.)" }
+            },
+            required: ["name"]
+          }
+        }
+      },
+      required: ["user_id", "food_items"]
+    }
+  },
+  
+  show_progress: {
+    name: "show_progress",
+    description: "Display user's daily nutrition progress and targets",
+    parameters: {
+      type: "object",
+      properties: {
+        user_id: { type: "string", description: "User's phone number" }
+      },
+      required: ["user_id"]
+    }
+  },
+  
+  update_meal: {
+    name: "update_meal",
+    description: "Update or modify the most recent meal entry",
+    parameters: {
+      type: "object",
+      properties: {
+        user_id: { type: "string", description: "User's phone number" },
+        action: { type: "string", enum: ["replace"], description: "Update action" }
+      },
+      required: ["user_id", "action"]
+    }
+  },
+  
+  delete_meal: {
+    name: "delete_meal",
+    description: "Delete the most recent meal",
+    parameters: {
+      type: "object",
+      properties: {
+        user_id: { type: "string", description: "User's phone number" }
+      },
+      required: ["user_id"]
+    }
+  },
+  
+  no_tool_needed: {
+    name: "no_tool_needed",
+    description: "Respond conversationally without using any tools",
+    parameters: {
+      type: "object",
+      properties: {
+        response_type: { type: "string", description: "Type of response" }
+      }
+    }
+  }
+};
+
+// Intent classification function
+async function classifyIntentAndExtractParams(userMessage, conversationContext, userProfile) {
+  const systemPrompt = `You are an expert intent classifier for a nutrition tracking app. Analyze the user's message and determine which tool/action is needed:
+
+- add_meal: Log food/meals (e.g., "I ate an apple", "Had breakfast")
+- update_meal: Modify recent meal entries (e.g., "Actually it was 2 apples", "Instead I had chicken")
+- delete_meal: Remove meal entries (e.g., "Delete that", "Remove last meal")
+- show_progress: Display nutrition progress (e.g., "Progress", "How am I doing")
+- no_tool_needed: General conversation (e.g., "Hello", "Thank you")
+
+CONTEXT RULES:
+- If user says "yes/no/sure/okay" - refer to conversation history
+- Look for meal timing: "breakfast", "lunch", "dinner", "snack"
+- Detect quantities: "2 apples", "100g chicken"
+- Recognize updates: "actually", "instead", "correction"
+- Recognize deletions: "delete", "remove", "didn't eat"
+
+USER PROFILE: ${userProfile ? JSON.stringify(userProfile, null, 2) : 'No profile data'}
+CONVERSATION: ${conversationContext || 'No previous conversation'}
+
+Respond ONLY with JSON:
+{
+  "intent": "tool_name",
+  "confidence": 0.95,
+  "extracted_params": {},
+  "reasoning": "Brief explanation"
+}`;
+
+  try {
+    console.log('🧠 INTENT CLASSIFICATION: Starting analysis...');
+    
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage }
+      ],
+      max_tokens: 300,
+      temperature: 0.1
+    });
+
+    const classification = JSON.parse(response.choices[0].message.content);
+    
+    console.log('🎯 INTENT DETECTED:', classification.intent);
+    console.log('📊 Confidence:', classification.confidence);
+    console.log('💭 Reasoning:', classification.reasoning);
+    
+    return classification;
+    
+  } catch (error) {
+    console.error('❌ Intent classification failed:', error);
+    
+    // Simple fallback
+    const fallbackIntent = simpleIntentFallback(userMessage);
+    return {
+      intent: fallbackIntent,
+      confidence: 0.6,
+      extracted_params: {},
+      reasoning: 'Fallback classification'
+    };
+  }
+}
+
+// Simple fallback intent detection
+function simpleIntentFallback(message) {
+  const msg = message.toLowerCase();
+  
+  if (/^progress$|daily progress|show.*progress/.test(msg)) return 'show_progress';
+  if (/delete|remove|didn't eat|cancel/.test(msg)) return 'delete_meal';
+  if (/actually|instead|correction|meant/.test(msg)) return 'update_meal';
+  if (/ate|had|eating|breakfast|lunch|dinner|snack/.test(msg)) return 'add_meal';
+  
+  return 'no_tool_needed';
+}
+
+// Enhance parameters with context
+function enhanceParametersWithContext(intent, extractedParams, userProfile) {
+  console.log('🔧 ENHANCING PARAMETERS for intent:', intent);
+  
+  const enhanced = { ...extractedParams };
+  
+  // Add user_id to all tool calls
+  if (intent !== 'no_tool_needed') {
+    enhanced.user_id = userProfile?.phone_number || 'unknown';
+  }
+  
+  // Auto-detect meal type for add_meal
+  if (intent === 'add_meal' && !enhanced.meal_type) {
+    const hour = new Date().getHours();
+    if (hour < 11) enhanced.meal_type = 'breakfast';
+    else if (hour < 16) enhanced.meal_type = 'lunch';  
+    else if (hour < 20) enhanced.meal_type = 'dinner';
+    else enhanced.meal_type = 'snack';
+    
+    console.log('🕒 Auto-detected meal type:', enhanced.meal_type);
+  }
+  
+  console.log('✅ ENHANCED PARAMETERS:', JSON.stringify(enhanced, null, 2));
+  return enhanced;
+}
+
 
 // ============================================================================
 // ENVIRONMENT VARIABLES
@@ -945,26 +1149,145 @@ Available commands:
       await updateUserSession(phone, userSession);
     }
 
-    console.log('💰 MAKING OPENAI API CALL - This will cost money');
-    console.log(`   - User: ${phone}`);
-    console.log(`   - Message tokens: ~${JSON.stringify(msgs).length / 4}`);
+    // ============================================================================
+    // ENHANCED AI PROCESSING WITH LANGCHAIN INTENT CLASSIFICATION
+    // ============================================================================
+    
+    console.log('🧠 STARTING ENHANCED AI PROCESSING WITH LANGCHAIN');
+    
+    // Build conversation context for intent classification
+    const contextHistory = userSession?.conversationHistory 
+      ? userSession.conversationHistory.slice(-2).map(exchange => 
+          `User: ${exchange.userMessage}\nBot: ${exchange.botResponse.substring(0, 100)}`
+        ).join('\n\n')
+      : '';
+    
+    // Classify intent and extract parameters
+    const intentClassification = await classifyIntentAndExtractParams(
+      text, 
+      contextHistory, 
+      userProfile
+    );
+    
+    console.log('🎯 FINAL INTENT:', intentClassification.intent);
+    console.log('📊 CONFIDENCE:', intentClassification.confidence);
+    
+    // Enhance parameters with user context
+    const enhancedParams = enhanceParametersWithContext(
+      intentClassification.intent,
+      intentClassification.extracted_params,
+      userProfile
+    );
+    
+    // Execute the appropriate action based on intent
+    let reply;
+    
+    switch (intentClassification.intent) {
+      case 'show_progress':
+        console.log('📊 EXECUTING SHOW_PROGRESS');
+        const personalGreeting = userProfile?.first_name ? `${userProfile.first_name}!` : '!';
+        reply = `📊 *Daily Progress:*
 
-    console.log('💰 MAKING OPENAI API CALL - This will cost money');
-    console.log(`   - User: ${phone}`);
-    console.log(`   - Message tokens: ~${JSON.stringify(msgs).length / 4}`);
+${bars(used, goals)}
 
-    const gpt = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: 'gpt-5-chat-latest',
-      messages: msgs,
-      max_tokens: 700,
-      temperature: 0.1
-    }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
+There's your progress update, ${personalGreeting} How are you feeling about reaching your targets today?`;
+        break;
+        
+      case 'delete_meal':
+        console.log('🗑️ EXECUTING DELETE_MEAL');
+        // Get the most recent meal
+        const { data: recentMeals } = await db
+          .from('meal_logs')
+          .select('*')
+          .eq('user_phone', phone)
+          .gte('created_at', today + 'T00:00:00')
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-    console.log('💰 OPENAI API CALL COMPLETED');
-    console.log(`   - Response tokens: ~${gpt.data.choices[0].message.content.length / 4}`);
+        if (recentMeals && recentMeals.length > 0) {
+          const mealToDelete = recentMeals[0];
+          
+          // Delete the meal
+          await db.from('meal_logs').delete().eq('id', mealToDelete.id);
+          
+          reply = `✅ Deleted your ${mealToDelete.meal_type}: ${mealToDelete.food_description}`;
+        } else {
+          reply = "I don't see any recent meals to delete.";
+        }
+        break;
+        
+      case 'update_meal':
+        console.log('✏️ EXECUTING UPDATE_MEAL - Using existing logic');
+        // Fall back to existing OpenAI logic for meal updates
+        const updateMsgs = [{
+          role: 'system',
+          content: `You are an expert nutrition tracking assistant. Handle this meal update request.`
+        }, {
+          role: 'user',
+          content: text
+        }];
+        
+        const updateGpt = await axios.post('https://api.openai.com/v1/chat/completions', {
+          model: 'gpt-4',
+          messages: updateMsgs,
+          max_tokens: 500,
+          temperature: 0.1
+        }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
+        
+        reply = updateGpt.data.choices[0].message.content;
+        break;
+        
+      case 'add_meal':
+        console.log('🍽️ EXECUTING ADD_MEAL - Using existing OpenAI logic');
+        // Use your existing OpenAI meal logging logic
+        const mealMsgs = [{
+          role: 'system',
+          content: `You are an expert nutrition tracking assistant for the IQ Calorie WhatsApp app. Analyze the food and provide accurate macro breakdowns.
 
-    let reply = gpt.data.choices[0].message.content;
-    console.log('🧾 GPT raw reply:\n', reply);
+CURRENT USER DATA:
+- Name: ${userProfile?.first_name || 'User'}
+- Goals: ${goals.kcal} kcal, ${goals.prot}g protein, ${goals.carb}g carbs, ${goals.fat}g fat
+- Current: ${used.kcal} kcal, ${used.prot}g protein, ${used.carb}g carbs, ${used.fat}g fat
+
+When logging food:
+1. Estimate realistic portions and calories
+2. Provide macro breakdown (protein, carbs, fat)
+3. Be encouraging and supportive
+4. Use progress bars: \${bars}
+
+Respond naturally and conversationally.`
+        }, {
+          role: 'user',
+          content: text
+        }];
+        
+        console.log('💰 MAKING OPENAI API CALL for meal analysis');
+        const mealGpt = await axios.post('https://api.openai.com/v1/chat/completions', {
+          model: 'gpt-4',
+          messages: mealMsgs,
+          max_tokens: 700,
+          temperature: 0.1
+        }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
+        
+        reply = mealGpt.data.choices[0].message.content;
+        break;
+        
+      case 'no_tool_needed':
+      default:
+        console.log('💬 EXECUTING CONVERSATIONAL RESPONSE');
+        const personalName = userProfile?.first_name || '';
+        
+        if (/hello|hi|hey|good morning/i.test(text)) {
+          reply = `Hey ${personalName}! Ready to track some nutrition today?`;
+        } else if (/thank you|thanks/i.test(text)) {
+          reply = `You're welcome${personalName ? ', ' + personalName : ''}! I'm here to help with your nutrition goals.`;
+        } else {
+          reply = `I'm here to help you track your nutrition${personalName ? ', ' + personalName : ''}! You can tell me what you ate, ask for progress updates, or get nutrition info. What would you like to do?`;
+        }
+        break;
+    }
+    
+    console.log('🎭 RESPONSE GENERATED:', reply.substring(0, 100) + '...');
 
     // ============================================================================
     // UPDATE CONVERSATION HISTORY WITH CURRENT EXCHANGE
@@ -2658,7 +2981,7 @@ const server = require('http').createServer(app).listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server is ready to accept connections`);
 });
 
-server.on('error', (err) => {f
+server.on('error', (err) => {
   console.error('❌ Server error:', err);
 });
 
