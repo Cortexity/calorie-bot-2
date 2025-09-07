@@ -501,7 +501,22 @@ async function classifyIntentAndExtractParams(userMessage, conversationContext, 
 - update_meal: Modify recent meal entries (e.g., "Actually it was 2 apples", "Instead I had chicken")
 - delete_meal: Remove meal entries (e.g., "Delete that", "Remove last meal")
 - show_progress: Display nutrition progress (e.g., "Progress", "How am I doing")
+- profile_change_attempt: User wants to CHANGE/UPDATE profile data (e.g., "Change my diet to vegan", "Update my weight", "Set calories to 2500")
+- get_user_profile: User asks ABOUT their current profile (e.g., "What's my diet?", "Show my goals")
 - no_tool_needed: General conversation (e.g., "Hello", "Thank you")
+
+CRITICAL PROFILE DETECTION RULES:
+1. If user wants to CHANGE/UPDATE/MODIFY any profile data → classify as "profile_change_attempt"
+2. If user asks ABOUT their current profile data → classify as "get_user_profile"
+3. Profile fields include: diet preference, goals, weight, height, calories, macros, activity level, age
+
+EXAMPLES:
+- "Change my diet to vegan" → profile_change_attempt
+- "I want to update my weight to 75kg" → profile_change_attempt  
+- "Set my calories to 2500" → profile_change_attempt
+- "I want to lose weight" → profile_change_attempt
+- "What's my current diet preference?" → get_user_profile
+- "Show me my goals" → get_user_profile
 
 CONTEXT RULES:
 - If user says "yes/no/sure/okay" - refer to conversation history
@@ -681,6 +696,117 @@ function enhanceParametersWithContext(intent, extractedParams, userProfile) {
   
   console.log('✅ ENHANCED PARAMETERS:', JSON.stringify(enhanced, null, 2));
   return enhanced;
+}
+
+// Generate dashboard redirect messages for profile changes
+function generateDashboardRedirectMessage(fieldToChange, userName) {
+  const fieldMessages = {
+    diet_preference: "diet preferences",
+    weight: "current weight", 
+    goals: "fitness goals",
+    calories: "calorie targets",
+    macros: "macro targets", 
+    activity_level: "activity level",
+    height: "height",
+    age: "age"
+  };
+
+  const greeting = userName ? `Hi ${userName}! ` : '';
+  const fieldName = fieldMessages[fieldToChange] || 'profile settings';
+
+  return `${greeting}I see you want to update your ${fieldName}! 📝
+
+You can update your profile anytime through your personal dashboard—it helps keep your info secure and accurate.
+
+👉 Type */dashboard* to get your secure link
+
+Once you update there, I'll automatically have your new information within seconds!
+
+This ensures your data stays consistent across all systems (WhatsApp, dashboard, and billing). 🔒`;
+}
+
+// Handle profile change attempts with dashboard redirection
+async function handleProfileChangeAttempt(intent, params, phone, userFirstName, userSession) {
+  console.log('🚫 Profile change attempt blocked - redirecting to dashboard');
+  console.log('📝 Field to change:', params.field_to_change);
+  console.log('💭 Proposed value:', params.new_value);
+  
+  // Track attempt in session for analytics
+  if (userSession) {
+    if (!userSession.profileChangeAttempts) {
+      userSession.profileChangeAttempts = [];
+    }
+    
+    userSession.profileChangeAttempts.push({
+      timestamp: new Date().toISOString(),
+      field: params.field_to_change,
+      attempted_value: params.new_value,
+      redirected: true
+    });
+    
+    userSession.lastDashboardRedirect = new Date().toISOString();
+    userSession.dashboardRedirectCount = (userSession.dashboardRedirectCount || 0) + 1;
+    
+    console.log('📊 Dashboard redirect count for user:', userSession.dashboardRedirectCount);
+  }
+  
+  // Generate personalized redirect message
+  return generateDashboardRedirectMessage(params.field_to_change, userFirstName);
+}
+
+// Handle profile information requests
+async function handleUserProfileRequest(intent, params, userProfile, userFirstName) {
+  console.log('👤 Profile information request detected');
+  
+  if (!userProfile) {
+    return `${userFirstName ? `Hi ${userFirstName}! ` : ''}I don't have your profile information available right now. Please try again in a moment or contact support if this persists.`;
+  }
+
+  const greeting = userFirstName ? `Hi ${userFirstName}! ` : '';
+  
+  // If specific field requested
+  if (params.specific_field) {
+    const field = params.specific_field.toLowerCase();
+    
+    if (field.includes('diet')) {
+      const diet = userProfile.diet_preference || 'No preference set';
+      return `${greeting}Your current diet preference is: **${diet}**
+
+To update this, type */dashboard* for your secure settings panel! 🔧`;
+    }
+    
+    if (field.includes('goal')) {
+      const goal = userProfile.fitness_goal || 'No goal set';
+      return `${greeting}Your current fitness goal is: **${goal}**
+
+To update this, type */dashboard* for your secure settings panel! 🎯`;
+    }
+    
+    if (field.includes('weight')) {
+      const weight = userProfile.weight_kg || 'Not set';
+      return `${greeting}Your current weight is: **${weight} kg**
+
+To update this, type */dashboard* for your secure settings panel! ⚖️`;
+    }
+  }
+  
+  // Show full profile summary
+  return `${greeting}Here's your current profile:
+
+👤 **Name:** ${userProfile.first_name || 'Not set'} ${userProfile.last_name || ''}
+🍽️ **Diet:** ${userProfile.diet_preference || 'No preference'}
+🎯 **Goal:** ${userProfile.fitness_goal || 'Not set'}
+⚖️ **Weight:** ${userProfile.weight_kg || 'Not set'} kg
+📏 **Height:** ${userProfile.height_cm || 'Not set'} cm
+🏃 **Activity:** ${userProfile.activity_level || 'Not set'}
+
+🔥 **Daily Targets:**
+- Calories: ${userProfile.kcal_goal || 'Not set'}
+- Protein: ${userProfile.prot_goal || 'Not set'}g
+- Carbs: ${userProfile.carb_goal || 'Not set'}g
+- Fat: ${userProfile.fat_goal || 'Not set'}g
+
+To update any of these, type */dashboard* for your secure settings panel! 🔧`;
 }
 
 
@@ -1353,7 +1479,7 @@ Available commands:
     reply = contextualGpt.data.choices[0].message.content;
     console.log('🎭 Context-aware response generated for', intentClassification.intent);
     
-    console.log('🎭 RESPONSE GENERATED:', reply.substring(0, 100) + '...');
+    console.log('🎭 FINAL RESPONSE GENERATED:', reply.substring(0, 100) + '...');
 
     // ============================================================================
     // UPDATE CONVERSATION HISTORY WITH CURRENT EXCHANGE
@@ -1377,11 +1503,44 @@ Available commands:
       console.log('📝 Conversation history updated with current exchange - Length:', userSession.conversationHistory.length);
     }
 
-    // LangChain handles ALL intent classification - no regex patterns needed
+    // ============================================================================
+    // INTENT-BASED RESPONSE HANDLING
+    // ============================================================================
+
     console.log('🎯 LangChain classified intent:', intentClassification.intent);
     console.log('📊 Confidence level:', intentClassification.confidence);
-    console.log('🎭 All responses now have full user context and conversation history');
 
+    // Handle profile change attempts with dashboard redirection
+    if (intentClassification.intent === 'profile_change_attempt') {
+      console.log('🚫 PROFILE CHANGE BLOCKED - Redirecting to dashboard');
+      
+      reply = await handleProfileChangeAttempt(
+        intentClassification.intent,
+        enhancedParams,
+        phone,
+        userFirstName,
+        userSession
+      );
+      
+      // Skip normal AI processing for profile changes
+    } 
+    // Handle profile information requests
+    else if (intentClassification.intent === 'get_user_profile') {
+      console.log('👤 PROFILE INFO REQUEST - Showing cached data');
+      
+      reply = await handleUserProfileRequest(
+        intentClassification.intent,
+        enhancedParams,
+        userProfile,
+        userFirstName
+      );
+      
+      // Skip normal AI processing for profile requests
+    }
+    // Process all other intents with context-aware AI
+    else {
+      console.log('🎭 Processing intent with context-aware AI:', intentClassification.intent);
+    }
     
     // Extract macros from the LangChain response and store in database
     const flat = reply.replace(/\n/g, ' ');
