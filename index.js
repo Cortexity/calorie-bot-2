@@ -491,7 +491,7 @@ Respond ONLY with JSON:
     console.log('🧠 INTENT CLASSIFICATION: Starting analysis...');
     
     const response = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-5-chat-latest',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage }
@@ -1310,7 +1310,7 @@ Available commands:
     
     console.log('💰 MAKING CONTEXT-AWARE OPENAI API CALL for intent:', intentClassification.intent);
     const contextualGpt = await axios.post('https://api.openai.com/v1/chat/completions', {
-      model: 'gpt-4',
+      model: 'gpt-5-chat-latest',
       messages: contextualMsgs,
       max_tokens: 700,
       temperature: 0.1
