@@ -446,6 +446,40 @@ const TOOL_SCHEMAS = {
       required: ["user_id"]
     }
   },
+
+  profile_change_attempt: {
+    name: "profile_change_attempt",
+    description: "User trying to change profile settings (diet, goals, weight, etc.)",
+    parameters: {
+      type: "object",
+      properties: {
+        user_id: { type: "string", description: "User's phone number" },
+        field_to_change: {
+          type: "string",
+          enum: ["diet_preference", "weight", "goals", "calories", "macros", "activity_level", "height", "age"],
+          description: "What the user wants to change"
+        },
+        new_value: { type: "string", description: "Proposed new value" }
+      },
+      required: ["user_id", "field_to_change"]
+    }
+  },
+
+  get_user_profile: {
+    name: "get_user_profile", 
+    description: "Display user's current profile information",
+    parameters: {
+      type: "object",
+      properties: {
+        user_id: { type: "string", description: "User's phone number" },
+        specific_field: { 
+          type: "string", 
+          description: "Specific field requested (optional)" 
+        }
+      },
+      required: ["user_id"]
+    }
+  },
   
   no_tool_needed: {
     name: "no_tool_needed",
