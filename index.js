@@ -189,6 +189,84 @@ const getCachedUserProfile = async (phone) => {
   }
 };
 
+// ============================================================================
+// MEAL HISTORY RETRIEVAL SYSTEM
+// ============================================================================
+
+// Get user's meal history with Redis caching
+const getUserMealHistory = async (phone, limit = 10) => {
+  if (!redisClient) {
+    // No Redis - fetch directly from Supabase
+    return await fetchMealHistoryFromSupabase(phone, limit);
+  }
+  
+  try {
+    const historyKey = `meal_history:${phone}`;
+    const cachedHistory = await redisClient.get(historyKey);
+    
+    if (cachedHistory) {
+      console.log('⚡ Retrieved cached meal history for:', phone);
+      return JSON.parse(cachedHistory);
+    } else {
+      // Cache miss - fetch from Supabase and cache
+      const history = await fetchMealHistoryFromSupabase(phone, limit);
+      if (history && history.length > 0) {
+        // Cache for 1 hour (shorter than profile cache since meals change more frequently)
+        await redisClient.setEx(historyKey, 3600, JSON.stringify(history));
+        console.log('📦 Cached meal history for:', phone);
+      }
+      return history;
+    }
+  } catch (error) {
+    console.error('❌ Error with meal history caching:', error);
+    return await fetchMealHistoryFromSupabase(phone, limit);
+  }
+};
+
+// Fetch meal history from Supabase
+const fetchMealHistoryFromSupabase = async (phone, limit = 10) => {
+  try {
+    console.log('🔍 Fetching meal history from Supabase for:', phone);
+    
+    const { data, error } = await db
+      .from('meal_logs')
+      .select('*')
+      .eq('user_phone', phone)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    
+    if (error) {
+      console.error('❌ Error fetching meal history:', error);
+      return [];
+    }
+    
+    console.log('✅ Retrieved', data?.length || 0, 'meals from history');
+    return data || [];
+    
+  } catch (error) {
+    console.error('❌ Error in fetchMealHistoryFromSupabase:', error);
+    return [];
+  }
+};
+
+// Invalidate meal history cache when new meals are added
+const invalidateMealHistoryCache = async (phone) => {
+  if (!redisClient) return;
+  
+  try {
+    const normalizedPhone = normalizePhoneNumber(phone);
+    const historyKey = `meal_history:${normalizedPhone}`;
+    
+    const deleted = await redisClient.del(historyKey);
+    
+    if (deleted > 0) {
+      console.log('✅ Meal history cache invalidated for:', normalizedPhone);
+    }
+  } catch (error) {
+    console.error('❌ Error invalidating meal history cache:', error);
+  }
+};
+
 // Fetch user profile from Supabase
 const fetchUserProfileFromSupabase = async (phone) => {
   try {
@@ -1577,6 +1655,43 @@ Available commands:
       
       // Skip normal AI processing for profile requests
     }
+    // Handle show_progress with enhanced meal history
+    else if (intentClassification.intent === 'show_progress') {
+      console.log('📊 SHOW PROGRESS - Loading meal history');
+      
+      // Get recent meal history for context
+      const mealHistory = await getUserMealHistory(phone, 10);
+      
+      // Build enhanced context with meal history
+      const mealHistoryContext = mealHistory.length > 0 
+        ? `Recent meals (ordered newest first): ${mealHistory.map((meal, index) => 
+            `${index + 1}. ${meal.meal_description} (${meal.kcal} kcal, ${meal.prot}g protein, ${meal.carb}g carbs, ${meal.fat}g fat) - ${new Date(meal.created_at).toLocaleString()}`
+          ).join(' | ')}`
+        : 'No recent meals found';
+      
+      console.log('🍽️ MEAL HISTORY CONTEXT:', mealHistoryContext);
+      
+      const contextualMsgs = [{
+        role: 'system',
+        content: buildContextAwareSystemPrompt(intentClassification.intent, userProfile, userSession, userFirstName) + 
+        `\n\nUSER'S COMPLETE MEAL HISTORY: ${mealHistoryContext}\n\nIMPORTANT: When user asks about "latest meal" or "last meal", always use the FIRST meal in this list as it's the most recent. The meals are ordered from newest to oldest. Always reference the actual meal data from this history, not from daily totals.`
+      }];
+
+      if (text) {
+        contextualMsgs.push({ role: 'user', content: text });
+      }
+      
+      console.log('💰 MAKING CONTEXT-AWARE OPENAI API CALL for show_progress with meal history');
+      const contextualGpt = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: 'gpt-5-chat-latest',
+        messages: contextualMsgs,
+        max_tokens: 700,
+        temperature: 0.1
+      }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
+      
+      reply = contextualGpt.data.choices[0].message.content;
+      console.log('🎭 Enhanced show_progress response with meal history generated');
+    }
     // Process all other intents with context-aware AI
     else {
       console.log('🎭 Processing intent with context-aware AI:', intentClassification.intent);
@@ -1612,6 +1727,9 @@ Available commands:
         meal_description: mealDescription,
         created_at: new Date() 
       });
+
+      // Invalidate meal history cache since we added a new meal
+      await invalidateMealHistoryCache(phone);
       
       // Update daily totals
       const { error: totalsError } = await db.rpc('increment_daily_totals', {
