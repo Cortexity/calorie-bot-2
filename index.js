@@ -494,36 +494,52 @@ const TOOL_SCHEMAS = {
 };
 
 // Intent classification function
-async function classifyIntentAndExtractParams(userMessage, conversationContext, userProfile) {
-  const systemPrompt = `You are an expert intent classifier for a nutrition tracking app. Analyze the user's message and determine which tool/action is needed:
+async function classifyIntentAndExtractParams(userMessage, conversationContext, userProfile, mUrl = null, mType = null) {
+  const systemPrompt = `You are an expert intent classifier for a nutrition tracking app.
 
-- add_meal: Log food/meals (e.g., "I ate an apple", "Had breakfast")
-- update_meal: Modify recent meal entries (e.g., "Actually it was 2 apples", "Instead I had chicken")
-- delete_meal: Remove meal entries (e.g., "Delete that", "Remove last meal")
-- show_progress: Display nutrition progress (e.g., "Progress", "How am I doing")
+Analyze the user's message and determine which tool/action is needed:
+
+- add_meal: Log food/meals (e.g., "I ate an apple", "Had breakfast", "Log this meal")
+- update_meal: Modify recent meal entries (e.g., "Actually it was 2 apples", "Instead I had chicken", "Change my last meal")
+- delete_meal: Remove meal entries (e.g., "Delete that", "Remove last meal", "Cancel previous entry")
+- show_progress: Display nutrition progress OR meal history (e.g., "Progress", "How am I doing", "What was my last meal", "Show my meals", "What did I eat")
 - profile_change_attempt: User wants to CHANGE/UPDATE profile data (e.g., "Change my diet to vegan", "Update my weight", "Set calories to 2500")
-- get_user_profile: User asks ABOUT their current profile (e.g., "What's my diet?", "Show my goals")
-- no_tool_needed: General conversation (e.g., "Hello", "Thank you")
+- get_user_profile: User asks for CURRENT STATIC profile info (e.g., "What's my diet preference?", "What are my goals?", "Show my profile")
+- no_tool_needed: General conversation (e.g., "Hello", "Thank you", "How are you", recipe requests, meal suggestions)
 
-CRITICAL PROFILE DETECTION RULES:
-1. If user wants to CHANGE/UPDATE/MODIFY any profile data → classify as "profile_change_attempt"
-2. If user asks ABOUT their current profile data → classify as "get_user_profile"
-3. Profile fields include: diet preference, goals, weight, height, calories, macros, activity level, age
+CRITICAL CLASSIFICATION RULES:
 
-EXAMPLES:
-- "Change my diet to vegan" → profile_change_attempt
-- "I want to update my weight to 75kg" → profile_change_attempt  
-- "Set my calories to 2500" → profile_change_attempt
-- "I want to lose weight" → profile_change_attempt
-- "What's my current diet preference?" → get_user_profile
-- "Show me my goals" → get_user_profile
+1. MEAL HISTORY vs PROFILE DATA:
+   - "What was my last meal?" → show_progress (meal history)
+   - "What's my diet preference?" → get_user_profile (static profile)
+   - "Show my meals today" → show_progress (meal tracking)
+   - "What are my calorie goals?" → get_user_profile (profile settings)
 
-CONTEXT RULES:
-- If user says "yes/no/sure/okay" - refer to conversation history
-- Look for meal timing: "breakfast", "lunch", "dinner", "snack"
-- Detect quantities: "2 apples", "100g chicken"
-- Recognize updates: "actually", "instead", "correction"
-- Recognize deletions: "delete", "remove", "didn't eat"
+2. PROFILE CHANGES vs PROFILE VIEWING:
+   - "Change my diet to vegan" → profile_change_attempt
+   - "What's my current diet?" → get_user_profile
+   - "Update my weight" → profile_change_attempt
+   - "How much do I weigh?" → get_user_profile
+
+3. MEAL OPERATIONS:
+   - Must contain food references OR be clearly about nutrition tracking
+   - "latest meal", "last meal", "what did I eat" → show_progress
+   - "actually it was...", "instead I had..." → update_meal
+   - "delete that meal", "remove entry" → delete_meal
+
+4. CONVERSATION vs TOOLS:
+   - Recipe requests, meal suggestions, general chat → no_tool_needed
+   - Specific nutrition tracking actions → appropriate tool
+   - Ambiguous messages default to no_tool_needed
+
+ENHANCED EXAMPLES:
+- "What was my latest meal?" → show_progress
+- "Show me what I ate today" → show_progress  
+- "What's my diet preference?" → get_user_profile
+- "Change my diet to keto" → profile_change_attempt
+- "Give me recipe for steak" → no_tool_needed
+- "I ate chicken" → add_meal
+- "Actually it was beef" → update_meal
 
 USER PROFILE: ${userProfile ? JSON.stringify(userProfile, null, 2) : 'No profile data'}
 CONVERSATION: ${conversationContext || 'No previous conversation'}
@@ -538,16 +554,38 @@ Respond ONLY with JSON:
 
   try {
     console.log('🧠 INTENT CLASSIFICATION: Starting analysis...');
-    
-    const response = await openai.chat.completions.create({
-      model: 'gpt-5-chat-latest',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
-      ],
-      max_tokens: 300,
-      temperature: 0.1
-    });
+console.log('🔍 Analyzing message type - Image:', !!mUrl, 'Text:', userMessage || 'empty');
+
+// Handle image-based messages
+const messages = [
+  { role: 'system', content: systemPrompt }
+];
+
+if (mUrl && mType && mType.startsWith('image/')) {
+  console.log('📸 IMAGE DETECTED: Classifying as food image');
+  // For food images, always classify as add_meal
+  const imageClassification = {
+    intent: 'add_meal',
+    confidence: 0.95,
+    extracted_params: {},
+    reasoning: 'Food image detected - automatically classified as meal logging'
+  };
+  
+  console.log('🎯 IMAGE INTENT DETECTED:', imageClassification.intent);
+  console.log('📊 Confidence:', imageClassification.confidence);
+  console.log('💭 Reasoning:', imageClassification.reasoning);
+  
+  return imageClassification;
+} else {
+  messages.push({ role: 'user', content: userMessage });
+}
+
+const response = await openai.chat.completions.create({
+  model: 'gpt-5-chat-latest',
+  messages: messages,
+  max_tokens: 300,
+  temperature: 0.1
+});
 
     const classification = JSON.parse(response.choices[0].message.content);
     
@@ -1415,7 +1453,9 @@ Available commands:
     const intentClassification = await classifyIntentAndExtractParams(
       text, 
       contextHistory, 
-      userProfile
+      userProfile,
+      mUrl,
+      mType
     );
     
     console.log('🎯 FINAL INTENT:', intentClassification.intent);
@@ -1599,6 +1639,9 @@ Available commands:
     // Always process the reply and replace progress bars
     reply = reply.replace(/\$\{(progress_bars|bars)\}/g, bars(used, goals));
     
+    console.log('📝 Reply variable check:', reply ? 'HAS CONTENT' : 'EMPTY');
+    console.log('📝 Reply preview:', reply?.substring(0, 100));
+
     twiml.message(reply);
     console.log('💬 Final reply sent.');
     
