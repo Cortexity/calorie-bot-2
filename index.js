@@ -384,6 +384,7 @@ function generateStandardizedProgressDisplay(used, goals) {
   const fatPct = Math.round((used.fat / goals.fat) * 100);
   
   return `⏳ *Daily Progress:*
+
 🔥${getTrafficLight(kcalPct)} *Calories:* ${used.kcal}/${goals.kcal} kcal
 🥩${getTrafficLight(protPct)} *Proteins:* ${used.prot}/${goals.prot} g
 🥔${getTrafficLight(carbPct)} *Carbs:* ${used.carb}/${goals.carb} g
@@ -1828,6 +1829,113 @@ Available commands:
       );
       
       // Skip normal AI processing for profile requests
+    }
+    // Handle meal updates with database modification
+    else if (intentClassification.intent === 'update_meal') {
+      console.log('🔧 MEAL UPDATE REQUEST - Processing with database changes');
+      
+      // Get the most recent meal to update
+      const recentMeals = await getUserMealHistory(phone, 1);
+      
+      if (!recentMeals || recentMeals.length === 0) {
+        reply = "I don't see any recent meals to update. Please log a meal first, then I can help you adjust it! 🍽️";
+      } else {
+        const lastMeal = recentMeals[0];
+        console.log('🎯 Updating meal:', lastMeal.meal_description, 'ID:', lastMeal.id);
+        
+        // Generate updated meal with AI
+        const contextualMsgs = [{
+          role: 'system',
+          content: buildContextAwareSystemPrompt(intentClassification.intent, userProfile, userSession, userFirstName) + 
+          `\n\nCURRENT MEAL TO UPDATE: ${lastMeal.meal_description} (${lastMeal.kcal} kcal, ${lastMeal.prot}g protein, ${lastMeal.carb}g carbs, ${lastMeal.fat}g fat)\n\nUser wants to adjust this meal. Generate the updated version with new macro calculations using the EXACT meal logging format with calories/proteins/carbs/fats numbers clearly marked.`
+        }];
+
+        if (text) {
+          contextualMsgs.push({ role: 'user', content: text });
+        }
+        
+        console.log('💰 MAKING OPENAI API CALL for meal update');
+        const updateResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
+          model: 'gpt-5-chat-latest',
+          messages: contextualMsgs,
+          max_tokens: 700,
+          temperature: 0.1
+        }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
+        
+        reply = updateResponse.data.choices[0].message.content;
+        console.log('🎭 Update response generated');
+        
+        // Extract NEW macros from the AI response
+        const flat = reply.replace(/\n/g, ' ');
+        const macroRegex = /Calories[^\d]*(\d+)[^]*?Proteins[^\d]*(\d+)[^]*?Carbs[^\d]*(\d+)[^]*?Fats[^\d]*(\d+)/i;
+        const match = flat.match(macroRegex);
+        
+        if (match) {
+          const [_, newKcal, newProt, newCarb, newFat] = match.map(Number);
+          
+          console.log('🔄 UPDATING DATABASE:', {
+            oldValues: { kcal: lastMeal.kcal, prot: lastMeal.prot, carb: lastMeal.carb, fat: lastMeal.fat },
+            newValues: { kcal: newKcal, prot: newProt, carb: newCarb, fat: newFat }
+          });
+          
+          // Update meal_logs record
+          const { error: updateError } = await db
+            .from('meal_logs')
+            .update({
+              kcal: newKcal,
+              prot: newProt,
+              carb: newCarb,
+              fat: newFat,
+            })
+            .eq('id', lastMeal.id);
+          
+          if (updateError) {
+            console.error('❌ Failed to update meal_logs:', updateError);
+          } else {
+            console.log('✅ meal_logs updated successfully');
+            
+            // Calculate difference for daily totals
+            const kcalDiff = newKcal - lastMeal.kcal;
+            const protDiff = newProt - lastMeal.prot;
+            const carbDiff = newCarb - lastMeal.carb;
+            const fatDiff = newFat - lastMeal.fat;
+            
+            console.log('📊 Daily totals adjustment:', { kcalDiff, protDiff, carbDiff, fatDiff });
+            
+            // Update daily totals with the difference
+            if (kcalDiff !== 0 || protDiff !== 0 || carbDiff !== 0 || fatDiff !== 0) {
+              const { error: totalsError } = await db.rpc('increment_daily_totals', {
+                p_phone: phone,
+                p_date: today,
+                p_kcal: kcalDiff,
+                p_prot: protDiff,
+                p_carb: carbDiff,
+                p_fat: fatDiff
+              });
+              
+              if (totalsError) {
+                console.error('❌ Failed to update daily totals:', totalsError);
+              } else {
+                console.log('✅ Daily totals updated with difference');
+                
+                // Update local used values for progress bars
+                used.kcal += kcalDiff;
+                used.prot += protDiff;
+                used.carb += carbDiff;
+                used.fat += fatDiff;
+              }
+            }
+            
+            // Invalidate meal history cache
+            await invalidateMealHistoryCache(phone);
+            console.log('🔄 Meal history cache invalidated after update');
+          }
+        } else {
+          console.log('⚠️ Could not extract macros from update response');
+        }
+      }
+      
+      // Skip normal AI processing since we handled it above
     }
     // Handle show_progress with enhanced meal history
     else if (intentClassification.intent === 'show_progress') {
