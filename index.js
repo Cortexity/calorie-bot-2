@@ -1956,6 +1956,92 @@ Available commands:
       
       // Skip normal AI processing since we handled it above
     }
+
+    // Handle meal deletions with database modification
+    else if (intentClassification.intent === 'delete_meal') {
+      console.log('🗑️ MEAL DELETE REQUEST - Processing with database changes');
+      
+      // Get the most recent meal to delete
+      const recentMeals = await getUserMealHistory(phone, 1);
+      
+      if (!recentMeals || recentMeals.length === 0) {
+        reply = "I don't see any recent meals to delete. Please log a meal first! 🍽️";
+      } else {
+        const lastMeal = recentMeals[0];
+        console.log('🎯 Deleting meal:', lastMeal.meal_description, 'ID:', lastMeal.id);
+        console.log('📊 Meal macros to subtract:', { 
+          kcal: lastMeal.kcal, 
+          prot: lastMeal.prot, 
+          carb: lastMeal.carb, 
+          fat: lastMeal.fat 
+        });
+        
+        // Delete from meal_logs table
+        const { error: deleteError } = await db
+          .from('meal_logs')
+          .delete()
+          .eq('id', lastMeal.id);
+        
+        if (deleteError) {
+          console.error('❌ Failed to delete meal_logs:', deleteError);
+          reply = "I had trouble deleting that meal. Please try again in a moment.";
+        } else {
+          console.log('✅ Meal deleted successfully from meal_logs');
+          
+          // Subtract the meal's macros from daily totals
+          const { error: totalsError } = await db.rpc('increment_daily_totals', {
+            p_phone: phone,
+            p_date: today,
+            p_kcal: -lastMeal.kcal,  // Negative to subtract
+            p_prot: -lastMeal.prot,
+            p_carb: -lastMeal.carb,
+            p_fat: -lastMeal.fat
+          });
+          
+          if (totalsError) {
+            console.error('❌ Failed to update daily totals after deletion:', totalsError);
+          } else {
+            console.log('✅ Daily totals updated after meal deletion');
+            
+            // Update local used values for progress bars
+            used.kcal -= lastMeal.kcal;
+            used.prot -= lastMeal.prot;
+            used.carb -= lastMeal.carb;
+            used.fat -= lastMeal.fat;
+          }
+          
+          // Invalidate meal history cache
+          await invalidateMealHistoryCache(phone);
+          console.log('🔄 Meal history cache invalidated after deletion');
+          
+          // Generate confirmation message via AI
+          const contextualMsgs = [{
+            role: 'system',
+            content: buildContextAwareSystemPrompt(intentClassification.intent, userProfile, userSession, userFirstName) + 
+            `\n\nDELETED MEAL: ${lastMeal.meal_description} (${lastMeal.kcal} kcal, ${lastMeal.prot}g protein, ${lastMeal.carb}g carbs, ${lastMeal.fat}g fat)\n\nGenerate a supportive confirmation message that the meal was deleted and daily totals were updated.`
+          }];
+
+          if (text) {
+            contextualMsgs.push({ role: 'user', content: text });
+          }
+          
+          console.log('💰 MAKING OPENAI API CALL for delete confirmation');
+          const deleteResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
+            model: 'gpt-5-chat-latest',
+            messages: contextualMsgs,
+            max_tokens: 400,
+            temperature: 0.1
+          }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
+          
+          reply = deleteResponse.data.choices[0].message.content;
+          console.log('🎭 Delete confirmation response generated');
+        }
+      }
+      
+      // Skip normal AI processing since we handled it above
+    }
+
+
     // Handle show_progress with enhanced meal history
     else if (intentClassification.intent === 'show_progress') {
       console.log('📊 SHOW PROGRESS - Loading meal history');
