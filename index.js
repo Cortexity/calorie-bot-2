@@ -1176,6 +1176,97 @@ app.post('/manual-reset', async (req, res) => {
 });
 
 // ============================================================================
+// MESSAGE CHUNKING UTILITIES
+// ============================================================================
+
+// Intelligently split long messages into WhatsApp-friendly chunks
+function splitMessageIntelligently(message, maxLength = 1500) {
+  if (message.length <= maxLength) {
+    return [message];
+  }
+  
+  const chunks = [];
+  let currentChunk = '';
+  
+  // Split by paragraphs first (double newlines)
+  const paragraphs = message.split('\n\n');
+  
+  for (const paragraph of paragraphs) {
+    // If adding this paragraph would exceed limit
+    if (currentChunk.length + paragraph.length + 2 > maxLength) {
+      // Save current chunk if it has content
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+        currentChunk = '';
+      }
+      
+      // If paragraph itself is too long, split by sentences
+      if (paragraph.length > maxLength) {
+        const sentences = splitLongParagraph(paragraph, maxLength);
+        for (const sentence of sentences) {
+          if (currentChunk.length + sentence.length + 1 > maxLength) {
+            if (currentChunk.trim()) {
+              chunks.push(currentChunk.trim());
+              currentChunk = '';
+            }
+          }
+          currentChunk += (currentChunk ? ' ' : '') + sentence;
+        }
+      } else {
+        currentChunk = paragraph;
+      }
+    } else {
+      currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
+    }
+  }
+  
+  // Add final chunk
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  console.log('📋 Message chunking summary:', {
+    originalLength: message.length,
+    chunks: chunks.length,
+    chunkSizes: chunks.map(chunk => chunk.length)
+  });
+  
+  return chunks;
+}
+
+// Split overly long paragraphs by sentences
+function splitLongParagraph(paragraph, maxLength) {
+  const sentences = paragraph.split(/(?<=[.!?])\s+/);
+  const chunks = [];
+  let currentChunk = '';
+  
+  for (const sentence of sentences) {
+    if (currentChunk.length + sentence.length + 1 > maxLength) {
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+        currentChunk = '';
+      }
+      
+      // If single sentence is still too long, force split
+      if (sentence.length > maxLength) {
+        const forceSplit = sentence.match(new RegExp(`.{1,${maxLength - 10}}`, 'g')) || [sentence];
+        chunks.push(...forceSplit);
+      } else {
+        currentChunk = sentence;
+      }
+    } else {
+      currentChunk += (currentChunk ? ' ' : '') + sentence;
+    }
+  }
+  
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  return chunks;
+}
+
+// ============================================================================
 // WHATSAPP WEBHOOK
 // ============================================================================
 
@@ -1760,8 +1851,37 @@ Available commands:
     console.log('📝 Reply variable check:', reply ? 'HAS CONTENT' : 'EMPTY');
     console.log('📝 Reply preview:', reply?.substring(0, 100));
 
-    twiml.message(reply);
-    console.log('💬 Final reply sent.');
+    // ============================================================================
+    // INTELLIGENT MESSAGE CHUNKING FOR LONG RESPONSES
+    // ============================================================================
+    
+    // Check if message exceeds WhatsApp limit (1600 chars)
+    if (reply && reply.length > 1500) {
+      console.log('📏 Long message detected:', reply.length, 'characters');
+      console.log('✂️ Splitting into chunks...');
+      
+      // Split message intelligently
+      const chunks = splitMessageIntelligently(reply);
+      
+      console.log('📦 Created', chunks.length, 'message chunks');
+      
+      // Send each chunk with small delay
+      for (let i = 0; i < chunks.length; i++) {
+        console.log(`📤 Sending chunk ${i + 1}/${chunks.length}:`, chunks[i].substring(0, 100) + '...');
+        twiml.message(chunks[i]);
+        
+        // Add small delay between chunks (except for last one)
+        if (i < chunks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      console.log('💬 All message chunks sent successfully');
+    } else {
+      // Normal single message
+      twiml.message(reply);
+      console.log('💬 Single message sent:', reply.length, 'characters');
+    }
     
     // Save updated session to Redis
     if (userSession) {
@@ -1769,7 +1889,7 @@ Available commands:
       console.log('💾 Final session save completed');
     }
     
-    res.type('text/xml').send(twiml.toString());
+    res.type('text/xml').send(twiml.toString());;
   } catch (err) {
     console.error('⚠️ Error in webhook:', err);
     twiml.message('⚠️ Something went wrong. Please try again.');
