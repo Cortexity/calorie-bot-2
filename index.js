@@ -1843,11 +1843,28 @@ Available commands:
         const lastMeal = recentMeals[0];
         console.log('🎯 Updating meal:', lastMeal.meal_description, 'ID:', lastMeal.id);
         
-        // Generate updated meal with AI
+        // Generate updated meal with AI using standardized format
         const contextualMsgs = [{
           role: 'system',
           content: buildContextAwareSystemPrompt(intentClassification.intent, userProfile, userSession, userFirstName) + 
-          `\n\nCURRENT MEAL TO UPDATE: ${lastMeal.meal_description} (${lastMeal.kcal} kcal, ${lastMeal.prot}g protein, ${lastMeal.carb}g carbs, ${lastMeal.fat}g fat)\n\nUser wants to adjust this meal. Generate the updated version with new macro calculations using the EXACT meal logging format with calories/proteins/carbs/fats numbers clearly marked.`
+          `\n\nCURRENT MEAL TO UPDATE: ${lastMeal.meal_description} (${lastMeal.kcal} kcal, ${lastMeal.prot}g protein, ${lastMeal.carb}g carbs, ${lastMeal.fat}g fat)\n\nUser wants to adjust this meal. Generate the updated version using this EXACT format:
+
+✅ *Meal updated successfully!*
+
+🍽️ *<MealType>:* <updated meal description>
+🔥 *Calories:* <kcal> kcal
+🥩 *Proteins:* <g> g
+🥔 *Carbs:* <g> g
+🧈 *Fats:* <g> g
+
+🔔 *Assumptions:* We've updated this to <explain what changed>. Let me know if anything else needs adjusting! 😊
+
+⏳ *Daily Progress:*
+\${bars}
+
+<motivational sentence about the update + ask how their day is going + relevant emoji>
+
+!! NEVER use graphical bars manually. Only include the literal string "\${bars}".`
         }];
 
         if (text) {
@@ -1934,6 +1951,8 @@ Available commands:
           console.log('⚠️ Could not extract macros from update response');
         }
       }
+      // Replace progress bars with actual data
+      reply = reply.replace(/\$\{(progress_bars|bars)\}/g, bars(used, goals));
       
       // Skip normal AI processing since we handled it above
     }
