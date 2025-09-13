@@ -2014,11 +2014,21 @@ Available commands:
           await invalidateMealHistoryCache(phone);
           console.log('🔄 Meal history cache invalidated after deletion');
           
-          // Generate confirmation message via AI
+          // Generate confirmation message using standardized format
           const contextualMsgs = [{
             role: 'system',
             content: buildContextAwareSystemPrompt(intentClassification.intent, userProfile, userSession, userFirstName) + 
-            `\n\nDELETED MEAL: ${lastMeal.meal_description} (${lastMeal.kcal} kcal, ${lastMeal.prot}g protein, ${lastMeal.carb}g carbs, ${lastMeal.fat}g fat)\n\nGenerate a supportive confirmation message that the meal was deleted and daily totals were updated.`
+            `\n\nDELETED MEAL: ${lastMeal.meal_description} (${lastMeal.kcal} kcal, ${lastMeal.prot}g protein, ${lastMeal.carb}g carbs, ${lastMeal.fat}g fat)\n\nGenerate a confirmation using this EXACT format:
+
+✅ Meal '${lastMeal.meal_description}' removed from today's log${userFirstName ? `, ${userFirstName}` : ''}.
+
+⏳ *Daily Progress:*
+
+\${bars}
+
+<brief supportive message asking if they need anything else>
+
+!! NEVER use graphical bars manually. Only include the literal string "\${bars}".`
           }];
 
           if (text) {
@@ -2037,6 +2047,9 @@ Available commands:
           console.log('🎭 Delete confirmation response generated');
         }
       }
+
+      // Replace progress bars with actual data
+      reply = reply.replace(/\$\{(progress_bars|bars)\}/g, bars(used, goals));
       
       // Skip normal AI processing since we handled it above
     }
