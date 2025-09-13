@@ -310,6 +310,90 @@ const invalidateUserProfileCache = async (phone) => {
 };
 
 // ============================================================================
+// STANDARDIZED DAILY PROGRESS SYSTEM
+// ============================================================================
+
+// Get standardized daily progress directly from Supabase
+const getStandardizedDailyProgress = async (phone) => {
+  try {
+    console.log('📊 Fetching standardized daily progress from Supabase for:', phone);
+    
+    const today = new Date().toISOString().slice(0, 10);
+    
+    // Get user data with current daily totals
+    const { data, error } = await db.rpc('get_user_data', { 
+      p_phone: phone, 
+      p_date: today 
+    });
+    
+    if (error) {
+      console.error('❌ Error fetching daily progress:', error);
+      return null;
+    }
+    
+    const row = data?.[0];
+    if (!row) {
+      console.log('⚠️ No daily progress data found for user');
+      return null;
+    }
+    
+    const goals = { 
+      kcal: row.kcal_goal, 
+      prot: row.prot_goal, 
+      carb: row.carb_goal, 
+      fat: row.fat_goal 
+    };
+    
+    const used = { 
+      kcal: row.kcal_used || 0, 
+      prot: row.prot_used || 0, 
+      carb: row.carb_used || 0, 
+      fat: row.fat_used || 0 
+    };
+    
+    console.log('📈 Daily progress data:', { used, goals });
+    
+    // Generate standardized progress display
+    const progressDisplay = generateStandardizedProgressDisplay(used, goals);
+    
+    return {
+      used,
+      goals,
+      progressDisplay,
+      userData: row
+    };
+    
+  } catch (error) {
+    console.error('❌ Error in getStandardizedDailyProgress:', error);
+    return null;
+  }
+};
+
+// Generate standardized progress display format
+function generateStandardizedProgressDisplay(used, goals) {
+  // Traffic light function
+  function getTrafficLight(percentage) {
+    if (percentage >= 95) return '🔴';
+    if (percentage > 70) return '🟠';
+    return '🟢';
+  }
+  
+  const kcalPct = Math.round((used.kcal / goals.kcal) * 100);
+  const protPct = Math.round((used.prot / goals.prot) * 100);
+  const carbPct = Math.round((used.carb / goals.carb) * 100);
+  const fatPct = Math.round((used.fat / goals.fat) * 100);
+  
+  return `⏳ *Daily Progress:*
+🔥${getTrafficLight(kcalPct)} *Calories:* ${used.kcal}/${goals.kcal} kcal
+🥩${getTrafficLight(protPct)} *Proteins:* ${used.prot}/${goals.prot} g
+🥔${getTrafficLight(carbPct)} *Carbs:* ${used.carb}/${goals.carb} g
+🧈${getTrafficLight(fatPct)} *Fats:* ${used.fat}/${goals.fat} g
+
+There's your progress update! How are you feeling about hitting your targets today?`;
+}
+
+
+// ============================================================================
 // DAILY RESET SCHEDULER
 // ============================================================================
 
@@ -488,9 +572,21 @@ const TOOL_SCHEMAS = {
     }
   },
   
-  show_progress: {
-    name: "show_progress",
-    description: "Display user's daily nutrition progress and targets",
+  get_daily_progress: {
+    name: "get_daily_progress", 
+    description: "Show standardized daily nutrition progress with traffic light indicators",
+    parameters: {
+      type: "object",
+      properties: {
+        user_id: { type: "string", description: "User's phone number" }
+      },
+      required: ["user_id"]
+    }
+  },
+
+  get_meal_history: {
+    name: "get_meal_history",
+    description: "Show user's recent meal history and food entries",
     parameters: {
       type: "object",
       properties: {
@@ -577,47 +673,34 @@ async function classifyIntentAndExtractParams(userMessage, conversationContext, 
 
 Analyze the user's message and determine which tool/action is needed:
 
-- add_meal: Log food/meals (e.g., "I ate an apple", "Had breakfast", "Log this meal")
-- update_meal: Modify recent meal entries (e.g., "Actually it was 2 apples", "Instead I had chicken", "Change my last meal")
-- delete_meal: Remove meal entries (e.g., "Delete that", "Remove last meal", "Cancel previous entry")
-- show_progress: Display nutrition progress OR meal history (e.g., "Progress", "How am I doing", "What was my last meal", "Show my meals", "What did I eat")
-- profile_change_attempt: User wants to CHANGE/UPDATE profile data (e.g., "Change my diet to vegan", "Update my weight", "Set calories to 2500")
-- get_user_profile: User asks for CURRENT STATIC profile info (e.g., "What's my diet preference?", "What are my goals?", "Show my profile")
-- no_tool_needed: General conversation (e.g., "Hello", "Thank you", "How are you", recipe requests, meal suggestions)
+- add_meal: User is logging food they consumed
+- update_meal: User is correcting/modifying a recent meal entry  
+- delete_meal: User wants to remove a meal entry
+- get_daily_progress: User wants to see their daily nutrition totals/progress
+- get_meal_history: User wants to see what meals they've logged recently
+- profile_change_attempt: User wants to modify their profile settings
+- get_user_profile: User asks about their current profile information
+- no_tool_needed: General conversation, recipes, or meal suggestions
 
-CRITICAL CLASSIFICATION RULES:
+SEMANTIC CLASSIFICATION RULES:
+Use the MEANING behind the user's request, not specific words:
 
-1. MEAL HISTORY vs PROFILE DATA:
-   - "What was my last meal?" → show_progress (meal history)
-   - "What's my diet preference?" → get_user_profile (static profile)
-   - "Show my meals today" → show_progress (meal tracking)
-   - "What are my calorie goals?" → get_user_profile (profile settings)
+DAILY PROGRESS intent (nutrition totals/goals):
+- Any request about overall daily nutrition status
+- Questions about hitting targets or daily totals
+- "Progress", "daily progress", "how am I doing", "my numbers", "daily totals"
 
-2. PROFILE CHANGES vs PROFILE VIEWING:
-   - "Change my diet to vegan" → profile_change_attempt
-   - "What's my current diet?" → get_user_profile
-   - "Update my weight" → profile_change_attempt
-   - "How much do I weigh?" → get_user_profile
+MEAL HISTORY intent (what they ate):
+- Any request about specific foods they logged
+- Questions about recent meals or food entries  
+- "What did I eat", "last meal", "recent meals", "meal history", "food log"
 
-3. MEAL OPERATIONS:
-   - Must contain food references OR be clearly about nutrition tracking
-   - "latest meal", "last meal", "what did I eat" → show_progress
-   - "actually it was...", "instead I had..." → update_meal
-   - "delete that meal", "remove entry" → delete_meal
+MEAL OPERATIONS:
+- Mentions eating/consuming food → add_meal
+- Correcting previous entry → update_meal  
+- Removing an entry → delete_meal
 
-4. CONVERSATION vs TOOLS:
-   - Recipe requests, meal suggestions, general chat → no_tool_needed
-   - Specific nutrition tracking actions → appropriate tool
-   - Ambiguous messages default to no_tool_needed
-
-ENHANCED EXAMPLES:
-- "What was my latest meal?" → show_progress
-- "Show me what I ate today" → show_progress  
-- "What's my diet preference?" → get_user_profile
-- "Change my diet to keto" → profile_change_attempt
-- "Give me recipe for steak" → no_tool_needed
-- "I ate chicken" → add_meal
-- "Actually it was beef" → update_meal
+Default to the user's TRUE INTENT, regardless of exact wording.
 
 USER PROFILE: ${userProfile ? JSON.stringify(userProfile, null, 2) : 'No profile data'}
 CONVERSATION: ${conversationContext || 'No previous conversation'}
@@ -1782,6 +1865,21 @@ Available commands:
       
       reply = contextualGpt.data.choices[0].message.content;
       console.log('🎭 Enhanced show_progress response with meal history generated');
+    }
+    // Handle standardized daily progress requests
+    else if (intentClassification.intent === 'get_daily_progress') {
+      console.log('📊 DAILY PROGRESS REQUEST - Fetching from database');
+      
+      const progressData = await getStandardizedDailyProgress(phone);
+      
+      if (!progressData) {
+        reply = "I couldn't fetch your daily progress right now. Please try again in a moment.";
+      } else {
+        reply = progressData.progressDisplay;
+        console.log('✅ Standardized daily progress generated');
+      }
+      
+      // Skip normal AI processing
     }
     // Process all other intents with context-aware AI
     else {
