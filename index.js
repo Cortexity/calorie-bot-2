@@ -74,6 +74,14 @@ const generateSessionId = (phone) => {
   return `session:${phone}:${Date.now()}`;
 };
 
+// Track what type of question the bot last asked
+const QUESTION_TYPES = {
+  DESSERT_SUGGESTION: 'dessert_suggestion',
+  GENERAL_FOLLOWUP: 'general_followup',
+  CLARIFICATION: 'clarification',
+  NONE: 'none'
+};
+
 // Enhanced debug logging for conversation history
 const debugConversationHistory = (userSession, stage, additionalInfo = {}) => {
   console.log(`\n🔍 CONVERSATION DEBUG - STAGE: ${stage}`);
@@ -181,7 +189,9 @@ const getUserSession = async (phone) => {
         activeIntent: null,
         pendingDetails: {},
         gatheredParams: {},
-        lastBotAssumption: null
+        lastBotAssumption: null,
+        lastQuestionType: 'none',
+        lastQuestionContext: null
       };
       
       // Store session with 24-hour expiry
@@ -834,7 +844,7 @@ const response = await openai.chat.completions.create({
     console.error('❌ Intent classification failed:', error);
     
     // Simple fallback
-    const fallbackIntent = simpleIntentFallback(userMessage);
+    const fallbackIntent = simpleIntentFallback(userMessage, conversationContext);
     return {
       intent: fallbackIntent,
       confidence: 0.6,
@@ -844,9 +854,18 @@ const response = await openai.chat.completions.create({
   }
 }
 
-// Simple fallback intent detection
-function simpleIntentFallback(message) {
-  const msg = message.toLowerCase();
+// Enhanced fallback intent detection with follow-up support
+function simpleIntentFallback(message, contextHistory = '') {
+  const msg = message.toLowerCase().trim();
+  
+  // Check for follow-up responses first
+  const isFollowUp = /^(yes|yeah|yep|sure|okay|ok|definitely|absolutely|please|no|nope|nah|not really)$/i.test(msg);
+  
+  if (isFollowUp && contextHistory) {
+    // If it's a follow-up and we have context, treat as conversational
+    console.log('🔄 FALLBACK: Follow-up response detected with context');
+    return 'no_tool_needed';
+  }
   
   if (/^progress$|daily progress|show.*progress/.test(msg)) return 'show_progress';
   if (/delete|remove|didn't eat|cancel/.test(msg)) return 'delete_meal';
@@ -883,8 +902,17 @@ function buildContextAwareSystemPrompt(intent, userProfile, userSession, userFir
     recentExchanges.forEach((exchange, index) => {
       conversationContext += `\n\n[${index + 1} exchanges ago]`;
       conversationContext += `\nUser: "${exchange.userMessage}"`;
-      conversationContext += `\nYour response: "${exchange.botResponse.substring(0, 150)}..."`;
+      // Include MORE context from bot responses to preserve questions
+      conversationContext += `\nYour response: "${exchange.botResponse.substring(0, 300)}..."`;
+      if (exchange.questionAsked && exchange.questionAsked !== 'none') {
+        conversationContext += `\n[Note: You asked a ${exchange.questionAsked} question here]`;
+      }
     });
+    
+    // Add special context for follow-up responses
+    if (userSession.lastQuestionType && userSession.lastQuestionType !== 'none') {
+      conversationContext += `\n\nIMPORTANT: Your last message contained a ${userSession.lastQuestionContext} question. If the user says yes/no/sure, they are responding to THAT specific question.`;
+    }
     
     conversationContext += '\n\nCONVERSATION RULES:\n- When user says "yes/no/sure/okay" - assume they mean your MOST RECENT question\n- Don\'t ask for clarification unless truly ambiguous\n- Be natural and conversational, not robotic\n- Don\'t say "I\'ll circle back" or "let me clarify" - just continue naturally';
   }
@@ -1763,22 +1791,34 @@ Available commands:
       await updateUserSession(phone, userSession);
     }
 
-    // ============================================================================
+    // ============================================================================f
     // ENHANCED AI PROCESSING WITH LANGCHAIN INTENT CLASSIFICATION
     // ============================================================================
     
     console.log('🧠 STARTING ENHANCED AI PROCESSING WITH LANGCHAIN');
     
-    // Build conversation context for intent classification
+    // Build conversation history context - ENHANCED for better follow-up understanding
     const contextHistory = userSession?.conversationHistory 
-      ? userSession.conversationHistory.slice(-2).map(exchange => {
+      ? userSession.conversationHistory.slice(-3).map(exchange => {
           // For images, use the bot's response to infer what the user asked about
           const userMsg = exchange.userMessage === '[image]' 
             ? 'User sent food image' 
             : exchange.userMessage;
-          return `User: ${userMsg}\nBot: ${exchange.botResponse.substring(0, 100)}`;
+          // Include MORE of the bot response to preserve question context
+          return `User: ${userMsg}\nBot: ${exchange.botResponse.substring(0, 250)}`;
         }).join('\n\n')
       : '';
+    
+    // Check if this is a follow-up response to a specific question type
+    const isFollowUpResponse = /^(yes|yeah|yep|sure|okay|ok|no|nope|nah|not really|definitely|absolutely|please)$/i.test(text?.trim() || '');
+    
+    if (isFollowUpResponse && userSession?.lastQuestionType) {
+      console.log('🔄 FOLLOW-UP DETECTED:', {
+        response: text,
+        lastQuestionType: userSession.lastQuestionType,
+        lastQuestionContext: userSession.lastQuestionContext
+      });
+    }
     
     // Classify intent and extract parameters
     const intentClassification = await classifyIntentAndExtractParams(
@@ -1857,13 +1897,34 @@ Available commands:
     // ============================================================================
     
     if (userSession) {
+      // Detect if bot asked a question in its response
+      let questionType = 'none';
+      let questionContext = null;
+      
+      if (reply) {
+        if (/would you like me to (suggest|recommend) a (dessert|sweet)/i.test(reply)) {
+          questionType = QUESTION_TYPES.DESSERT_SUGGESTION;
+          questionContext = 'dessert suggestion';
+          console.log('🍰 Bot asked about dessert suggestion');
+        } else if (/would you like|do you want|shall I/i.test(reply)) {
+          questionType = QUESTION_TYPES.GENERAL_FOLLOWUP;
+          questionContext = 'general follow-up';
+          console.log('❓ Bot asked a general follow-up question');
+        }
+      }
+      
+      // Store the question type for next interaction
+      userSession.lastQuestionType = questionType;
+      userSession.lastQuestionContext = questionContext;
+      
       // Add this exchange to conversation history
       userSession.conversationHistory.push({
         timestamp: new Date().toISOString(),
         userMessage: text || (isImg ? '[image]' : '[audio]'),
         botResponse: reply,
         messageType: isImg ? 'image' : (isAudio ? 'audio' : 'text'),
-        macrosLogged: null
+        macrosLogged: null,
+        questionAsked: questionType  // Track what question was asked
       });
       
       // Keep only last 5 exchanges to manage memory
