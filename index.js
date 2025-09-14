@@ -79,6 +79,9 @@ const QUESTION_TYPES = {
   DESSERT_SUGGESTION: 'dessert_suggestion',
   GENERAL_FOLLOWUP: 'general_followup',
   CLARIFICATION: 'clarification',
+  LIST_OFFERING: 'list_offering',
+  SELECTION_FROM_LIST: 'selection_from_list',
+  YES_NO_QUESTION: 'yes_no_question',
   NONE: 'none'
 };
 
@@ -752,22 +755,45 @@ const TOOL_SCHEMAS = {
 };
 
 // Intent classification function
-async function classifyIntentAndExtractParams(userMessage, conversationContext, userProfile, mUrl = null, mType = null) {
+async function classifyIntentAndExtractParams(userMessage, conversationContext, userProfile, mUrl = null, mType = null, userSession = null) {
+  // Pass the session context to help AI understand better
+  const lastQuestionInfo = userSession?.lastQuestionType ? 
+    `\nLAST BOT INTERACTION: The bot just asked a ${userSession.lastQuestionContext} question.` : '';
+  
   const systemPrompt = `You are an expert intent classifier for a nutrition tracking app.
+${lastQuestionInfo}
+
+CRITICAL CLASSIFICATION PRIORITY:
+1. ANY mention of food items (pasta, bread, eggs, cereal, etc.) = ALWAYS classify as add_meal
+2. Food with quantities (2 eggs, 200g pasta) = ALWAYS add_meal
+3. Past tense eating (had, ate, consumed) + food = ALWAYS add_meal
+4. Only use no_tool_needed for actual conversation, NOT for food logging
+
+CONTEXT UNDERSTANDING:
+- Short affirmative responses are responding to the bot's last question
+- Ordinal selections are selecting from the bot's last provided list
+- Short negative responses are declining the bot's last offer
 
 Analyze the user's message and determine which tool/action is needed:
 
-- add_meal: User is logging food they consumed
+- add_meal: User is logging food they consumed: ANY food mention, even single words like "pasta" or "bread" or other food items 
 - update_meal: User is correcting/modifying a recent meal entry  
 - delete_meal: User wants to remove a meal entry
 - get_daily_progress: User wants to see their daily nutrition totals/progress
 - get_meal_history: User wants to see what meals they've logged recently
 - profile_change_attempt: User wants to modify their profile settings
 - get_user_profile: User asks about their current profile information
-- no_tool_needed: General conversation, recipes, or meal suggestions
+- no_tool_needed: General conversation, recipes, meal suggestions, OR responses to bot questions
 
 SEMANTIC CLASSIFICATION RULES:
-Use the MEANING behind the user's request, not specific words:
+FOOD ITEMS OVERRIDE: If the message contains ANY food item name, it's add_meal regardless of brevity.
+Examples that MUST be add_meal:
+- "pasta" → add_meal (don't ask for details)
+- "had cereals" → add_meal (don't ask what kind)
+- "just ate bread" → add_meal (don't ask how much)
+- "2 eggs" → add_meal (has food + quantity)
+
+Use the MEANING and CONTEXT behind the user's request (not just specific words), to determine the intent (VERY IMPORTANT RULE!):
 
 DAILY PROGRESS intent (nutrition totals/goals):
 - Any request about overall daily nutrition status
@@ -860,10 +886,11 @@ function simpleIntentFallback(message, contextHistory = '') {
   
   // Check for follow-up responses first
   const isFollowUp = /^(yes|yeah|yep|sure|okay|ok|definitely|absolutely|please|no|nope|nah|not really)$/i.test(msg);
+  const isListSelection = /^(first|second|third|fourth|1st|2nd|3rd|4th|option 1|option 2|number one|number two|first one|second one)$/i.test(msg);
   
-  if (isFollowUp && contextHistory) {
-    // If it's a follow-up and we have context, treat as conversational
-    console.log('🔄 FALLBACK: Follow-up response detected with context');
+  if ((isFollowUp || isListSelection) && contextHistory) {
+    // If it's a follow-up or list selection and we have context, treat as conversational
+    console.log('🔄 FALLBACK: Follow-up or selection response detected with context');
     return 'no_tool_needed';
   }
   
@@ -1696,11 +1723,19 @@ Available commands:
       content: `You are an expert nutrition tracking assistant for the IQ Calorie Whatsapp app. You specialize in analyzing food and providing accurate macro breakdowns. ${nameContext}${userContext}${conversationContext}
       
       CONVERSATION STYLE:
-      - Be natural and conversational, like texting a an empathetic friend
-      - When users say "yes/no/sure/okay" - they usually mean your most recent question
+      - Be natural and conversational, like texting an empathetic friend
+      - When users say "yes/no/sure/okay" - they ALWAYS mean your most recent question
+      - When users say "first one/second one/option 1" - they're selecting from your last list
       - Don't over-clarify or say "let me circle back" - just continue the conversation
+      - For simple food items like "pasta" or "burger", log them immediately with standard portions
+      - Don't ask for clarification on common foods - make reasonable assumptions
       - Use the conversation history to understand context, don't repeatedly ask for clarification
       - If something is genuinely unclear, ask once, then assume the most logical interpretation
+      
+      IMPORTANT RULES:
+      - If you asked "Do you want me to create a list?" and user says "Yes" - CREATE THE LIST
+      - If you provided options and user says "first one" - they're selecting that option
+      - For common foods without details, use standard portions (e.g., pasta = 200g cooked)
       
       Core responsibilities:
       - Analyze food photos and descriptions to estimate calories and macros
@@ -1711,6 +1746,7 @@ Available commands:
       Key guidelines:
       - For meal inputs (photos or descriptions), always provide nutritional estimates in the standardized format
       - When food details are vague, make reasonable assumptions and explain them clearly
+      NEVER ask for clarification on common foods - always make reasonable assumptions
       - Be generous with portion estimates when uncertain (users prefer slightly higher estimates)
       - Use common sense for meal timing (breakfast, lunch, dinner, snack) based on food type
       - For IMAGE & AUDIO INPUTS: go directly to the standardized meal format strictly with 18 words or less strictly of analysis commentary on top of the standardized format.
@@ -1720,6 +1756,7 @@ Available commands:
       Response formatting:
       - When responding to questions that should NOT use the standardized meal format, break your answer into small, readable paragraphs
       - Keep paragraphs short (1-3 sentences each) for easy reading on mobile
+      - Use WhatsApp-based formatting (bold, italic, etc.) for all non-standardised format responses. 
       - Use natural, conversational language
 
   When users send meal inputs, create a meal log using this format every time:
@@ -1826,7 +1863,8 @@ Available commands:
       contextHistory, 
       userProfile,
       mUrl,
-      mType
+      mType,
+      userSession
     );
     
     console.log('🎯 FINAL INTENT:', intentClassification.intent);
@@ -1897,20 +1935,55 @@ Available commands:
     // ============================================================================
     
     if (userSession) {
-      // Detect if bot asked a question in its response
+      // Detect if bot asked a question in its response - ENHANCED detection
       let questionType = 'none';
       let questionContext = null;
+      let listItems = null;
       
       if (reply) {
-        if (/would you like me to (suggest|recommend) a (dessert|sweet)/i.test(reply)) {
+        // Check for list offerings first
+        if (/do you want me to (put together|create|make|give you) a.*list/i.test(reply) ||
+            /would you like me to.*list/i.test(reply)) {
+          questionType = QUESTION_TYPES.LIST_OFFERING;
+          questionContext = 'offering to create a list';
+          console.log('📋 Bot offered to create a list');
+        }
+        // Check if bot provided numbered/bulleted options
+        else if (/\*\*1\.|^1\.|#1/m.test(reply) || /first.*option.*second.*option/i.test(reply)) {
+          questionType = QUESTION_TYPES.SELECTION_FROM_LIST;
+          questionContext = 'provided list for selection';
+          // Try to extract list items
+          const listMatches = reply.match(/(?:\*\*|^)(\d+\..*?)(?=\n|$)/gm);
+          if (listMatches) {
+            listItems = listMatches.map(item => item.trim());
+            console.log('📝 Bot provided list with', listItems.length, 'items');
+          }
+        }
+        // Dessert suggestion
+        else if (/would you like me to (suggest|recommend) a (dessert|sweet)/i.test(reply)) {
           questionType = QUESTION_TYPES.DESSERT_SUGGESTION;
           questionContext = 'dessert suggestion';
           console.log('🍰 Bot asked about dessert suggestion');
-        } else if (/would you like|do you want|shall I/i.test(reply)) {
+        }
+        // Yes/No questions
+        else if (/\?[\s]*$/m.test(reply) && /\b(do you want|would you like|shall I|should I|can I)\b/i.test(reply)) {
+          questionType = QUESTION_TYPES.YES_NO_QUESTION;
+          questionContext = 'yes/no question';
+          console.log('❓ Bot asked a yes/no question');
+        }
+        // General follow-up
+        else if (/would you like|do you want|shall I/i.test(reply)) {
           questionType = QUESTION_TYPES.GENERAL_FOLLOWUP;
           questionContext = 'general follow-up';
           console.log('❓ Bot asked a general follow-up question');
         }
+      }
+      
+      // Store the question type and any list items for next interaction
+      userSession.lastQuestionType = questionType;
+      userSession.lastQuestionContext = questionContext;
+      if (listItems) {
+        userSession.lastListItems = listItems;
       }
       
       // Store the question type for next interaction
