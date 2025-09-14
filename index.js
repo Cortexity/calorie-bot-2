@@ -74,6 +74,79 @@ const generateSessionId = (phone) => {
   return `session:${phone}:${Date.now()}`;
 };
 
+// Enhanced debug logging for conversation history
+const debugConversationHistory = (userSession, stage, additionalInfo = {}) => {
+  console.log(`\n🔍 CONVERSATION DEBUG - STAGE: ${stage}`);
+  console.log(`📞 Phone: ${additionalInfo.phone || 'Unknown'}`);
+  console.log(`📝 Current Message: "${additionalInfo.currentMessage || 'N/A'}"`);
+  console.log(`⏰ Timestamp: ${new Date().toISOString()}`);
+  
+  if (!userSession) {
+    console.log(`❌ No user session found`);
+    return;
+  }
+  
+  console.log(`📊 Session Info:`);
+  console.log(`   - Session ID: ${userSession.sessionId}`);
+  console.log(`   - Start Time: ${userSession.startTime}`);
+  console.log(`   - Active Intent: ${userSession.activeIntent || 'None'}`);
+  
+  const history = userSession.conversationHistory || [];
+  console.log(`📚 Conversation History Length: ${history.length}`);
+  
+  if (history.length === 0) {
+    console.log(`   - No conversation history`);
+  } else {
+    console.log(`📜 Full Conversation History:`);
+    history.forEach((exchange, index) => {
+      console.log(`   [${index + 1}] ${exchange.timestamp}`);
+      console.log(`       User: "${exchange.userMessage}"`);
+      console.log(`       Bot:  "${exchange.botResponse?.substring(0, 100)}${exchange.botResponse?.length > 100 ? '...' : ''}"`);
+      console.log(`       Type: ${exchange.messageType}`);
+    });
+  }
+  
+  // Show what the AI would see as context
+  if (history.length > 0) {
+    console.log(`\n🤖 AI CONTEXT THAT WOULD BE BUILT:`);
+    const recentExchanges = history.slice(-3);
+    recentExchanges.forEach((exchange, index) => {
+      console.log(`   [${recentExchanges.length - index} exchanges ago]`);
+      console.log(`   User: "${exchange.userMessage}"`);
+      console.log(`   Your response: "${exchange.botResponse?.substring(0, 150)}..."`);
+    });
+  }
+  
+  console.log(`\n${'-'.repeat(80)}\n`);
+};
+
+// Debug intent classification with conversation context
+const debugIntentClassification = (userMessage, contextHistory, classification) => {
+  console.log(`\n🎯 INTENT CLASSIFICATION DEBUG`);
+  console.log(`📝 User Message: "${userMessage}"`);
+  console.log(`📚 Context History Available: ${contextHistory ? 'YES' : 'NO'}`);
+  
+  if (contextHistory) {
+    console.log(`📖 Context Preview: "${contextHistory.substring(0, 200)}..."`);
+  }
+  
+  console.log(`🎯 Classified Intent: ${classification.intent}`);
+  console.log(`📊 Confidence: ${classification.confidence}`);
+  console.log(`💭 Reasoning: ${classification.reasoning}`);
+  console.log(`📋 Extracted Params:`, classification.extracted_params);
+  
+  // Special check for follow-up responses
+  const isLikelyFollowUp = /^(yes|no|sure|okay|yep|nope|maybe|definitely|absolutely)$/i.test(userMessage.trim());
+  if (isLikelyFollowUp) {
+    console.log(`🚨 FOLLOW-UP DETECTED: "${userMessage}" looks like a response to a previous question`);
+    if (!contextHistory) {
+      console.log(`❌ BUT NO CONTEXT HISTORY PROVIDED TO CLASSIFIER!`);
+    }
+  }
+  
+  console.log(`\n${'-'.repeat(80)}\n`);
+};
+
 // Get or create user session
 const getUserSession = async (phone) => {
   if (!redisClient) {
@@ -1698,9 +1771,13 @@ Available commands:
     
     // Build conversation context for intent classification
     const contextHistory = userSession?.conversationHistory 
-      ? userSession.conversationHistory.slice(-2).map(exchange => 
-          `User: ${exchange.userMessage}\nBot: ${exchange.botResponse.substring(0, 100)}`
-        ).join('\n\n')
+      ? userSession.conversationHistory.slice(-2).map(exchange => {
+          // For images, use the bot's response to infer what the user asked about
+          const userMsg = exchange.userMessage === '[image]' 
+            ? 'User sent food image' 
+            : exchange.userMessage;
+          return `User: ${userMsg}\nBot: ${exchange.botResponse.substring(0, 100)}`;
+        }).join('\n\n')
       : '';
     
     // Classify intent and extract parameters
