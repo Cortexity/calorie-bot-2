@@ -1946,11 +1946,11 @@ Available commands:
       
       // Skip normal AI processing for profile requests
     }
-    // Handle meal updates with database modification
+    // Handle meal updates with database modification and temporary injection
     else if (intentClassification.intent === 'update_meal') {
-      console.log('🔧 MEAL UPDATE REQUEST - Processing with database changes');
+      console.log('🔧 MEAL UPDATE REQUEST - Using temporary meal injection');
       
-      // Get the most recent meal to update
+      // STEP 1: Fetch the most recent meal from Supabase
       const recentMeals = await getUserMealHistory(phone, 1);
       
       if (!recentMeals || recentMeals.length === 0) {
@@ -1959,7 +1959,15 @@ Available commands:
         const lastMeal = recentMeals[0];
         console.log('🎯 Updating meal:', lastMeal.meal_description, 'ID:', lastMeal.id);
         
-        // Generate updated meal with AI using standardized format
+        // STEP 2: Temporarily store in Redis (5-min TTL as safety)
+        let tempKey = null;
+        if (redisClient) {
+          tempKey = `temp:meals:${phone}:${Date.now()}`;
+          await redisClient.setEx(tempKey, 300, JSON.stringify([lastMeal]));
+          console.log('📦 TEMP: Stored meal data in Redis:', tempKey);
+        }
+        
+        // STEP 3: Generate updated meal with AI using standardized format
         const contextualMsgs = [{
           role: 'system',
           content: buildContextAwareSystemPrompt(intentClassification.intent, userProfile, userSession, userFirstName) + 
@@ -2073,11 +2081,11 @@ Available commands:
       // Skip normal AI processing since we handled it above
     }
 
-    // Handle meal deletions with database modification
+    // Handle meal deletions with database modification and temporary injection
     else if (intentClassification.intent === 'delete_meal') {
-      console.log('🗑️ MEAL DELETE REQUEST - Processing with database changes');
+      console.log('🗑️ MEAL DELETE REQUEST - Using temporary meal injection');
       
-      // Get the most recent meal to delete
+      // STEP 1: Fetch the most recent meal from Supabase
       const recentMeals = await getUserMealHistory(phone, 1);
       
       if (!recentMeals || recentMeals.length === 0) {
@@ -2085,6 +2093,14 @@ Available commands:
       } else {
         const lastMeal = recentMeals[0];
         console.log('🎯 Deleting meal:', lastMeal.meal_description, 'ID:', lastMeal.id);
+        
+        // STEP 2: Temporarily store in Redis (5-min TTL as safety)
+        let tempKey = null;
+        if (redisClient) {
+          tempKey = `temp:meals:${phone}:${Date.now()}`;
+          await redisClient.setEx(tempKey, 300, JSON.stringify([lastMeal]));
+          console.log('📦 TEMP: Stored meal data in Redis:', tempKey);
+        }
         console.log('📊 Meal macros to subtract:', { 
           kcal: lastMeal.kcal, 
           prot: lastMeal.prot, 
@@ -2136,7 +2152,7 @@ Available commands:
             content: buildContextAwareSystemPrompt(intentClassification.intent, userProfile, userSession, userFirstName) + 
             `\n\nDELETED MEAL: ${lastMeal.meal_description} (${lastMeal.kcal} kcal, ${lastMeal.prot}g protein, ${lastMeal.carb}g carbs, ${lastMeal.fat}g fat)\n\nGenerate a confirmation using this EXACT format:
 
-✅ Meal '${lastMeal.meal_description}' removed from today's log${userFirstName ? `, ${userFirstName}` : ''}.
+✅ *Meal "${lastMeal.meal_description}" removed from today's log${userFirstName ? `, ${userFirstName}` : ''}.*
 
 ⏳ *Daily Progress:*
 
@@ -2161,6 +2177,14 @@ Available commands:
           
           reply = deleteResponse.data.choices[0].message.content;
           console.log('🎭 Delete confirmation response generated');
+          
+          // STEP 4: IMMEDIATELY delete temp data after LLM response
+          if (tempKey && redisClient) {
+            const deleted = await redisClient.del(tempKey);
+            console.log('🗑️ TEMP: Immediately deleted meal data from Redis:', tempKey, '- Deleted:', deleted);
+          }
+          
+          console.log('✅ Temporary injection complete - Redis is clean');
         }
       }
 
@@ -2204,21 +2228,28 @@ Ready to start tracking? Just send me a photo of your meal or describe what you 
     }
 
 
-    // Handle show_progress with enhanced meal history
+    // Handle show_progress with TEMPORARY meal data injection
     else if (intentClassification.intent === 'show_progress') {
-      console.log('📊 SHOW PROGRESS - Loading meal history');
+      console.log('📊 SHOW PROGRESS - Using temporary meal data injection');
       
-      // Get recent meal history for context
+      // STEP 1: Fetch meal data from Supabase (source of truth)
       const mealHistory = await getUserMealHistory(phone, 10);
+      console.log('✅ Fetched', mealHistory.length, 'meals from Supabase');
       
-      // Build enhanced context with meal history
+      // STEP 2: Temporarily store in Redis for LLM context (with 5-min TTL as safety)
+      let tempKey = null;
+      if (redisClient && mealHistory.length > 0) {
+        tempKey = `temp:meals:${phone}:${Date.now()}`;
+        await redisClient.setEx(tempKey, 300, JSON.stringify(mealHistory));
+        console.log('📦 TEMP: Stored meal data in Redis:', tempKey);
+      }
+      
+      // STEP 3: Build context for LLM
       const mealHistoryContext = mealHistory.length > 0 
         ? `Recent meals (ordered newest first): ${mealHistory.map((meal, index) => 
             `${index + 1}. ${meal.meal_description} (${meal.kcal} kcal, ${meal.prot}g protein, ${meal.carb}g carbs, ${meal.fat}g fat) - ${new Date(meal.created_at).toLocaleString()}`
           ).join(' | ')}`
         : 'No recent meals found';
-      
-      console.log('🍽️ MEAL HISTORY CONTEXT:', mealHistoryContext);
       
       const contextualMsgs = [{
         role: 'system',
@@ -2230,7 +2261,7 @@ Ready to start tracking? Just send me a photo of your meal or describe what you 
         contextualMsgs.push({ role: 'user', content: text });
       }
       
-      console.log('💰 MAKING CONTEXT-AWARE OPENAI API CALL for show_progress with meal history');
+      console.log('💰 MAKING OPENAI API CALL with temporary meal context');
       const contextualGpt = await axios.post('https://api.openai.com/v1/chat/completions', {
         model: 'gpt-5-chat-latest',
         messages: contextualMsgs,
@@ -2239,12 +2270,33 @@ Ready to start tracking? Just send me a photo of your meal or describe what you 
       }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
       
       reply = contextualGpt.data.choices[0].message.content;
-      console.log('🎭 Enhanced show_progress response with meal history generated');
-    }
-    // Handle standardized daily progress requests
-    else if (intentClassification.intent === 'get_daily_progress') {
-      console.log('📊 DAILY PROGRESS REQUEST - Fetching from database');
+      console.log('🎭 LLM response generated with meal context');
       
+      // STEP 4: IMMEDIATELY delete temp data after LLM response
+      if (tempKey && redisClient) {
+        const deleted = await redisClient.del(tempKey);
+        console.log('🗑️ TEMP: Immediately deleted meal data from Redis:', tempKey, '- Deleted:', deleted);
+      }
+      
+      console.log('✅ Temporary injection complete - Redis is clean');
+    }
+    // Handle standardized daily progress requests with temporary meal injection
+    else if (intentClassification.intent === 'get_daily_progress') {
+      console.log('📊 DAILY PROGRESS REQUEST - Using temporary meal injection');
+      
+      // STEP 1: Fetch meal data from Supabase
+      const mealHistory = await getUserMealHistory(phone, 10);
+      console.log('✅ Fetched', mealHistory.length, 'meals from Supabase for context');
+      
+      // STEP 2: Temporarily store in Redis (5-min TTL as safety)
+      let tempKey = null;
+      if (redisClient && mealHistory.length > 0) {
+        tempKey = `temp:meals:${phone}:${Date.now()}`;
+        await redisClient.setEx(tempKey, 300, JSON.stringify(mealHistory));
+        console.log('📦 TEMP: Stored meal data in Redis:', tempKey);
+      }
+      
+      // STEP 3: Get progress data
       const progressData = await getStandardizedDailyProgress(phone);
       
       if (!progressData) {
@@ -2253,6 +2305,14 @@ Ready to start tracking? Just send me a photo of your meal or describe what you 
         reply = progressData.progressDisplay;
         console.log('✅ Standardized daily progress generated');
       }
+      
+      // STEP 4: IMMEDIATELY delete temp data
+      if (tempKey && redisClient) {
+        const deleted = await redisClient.del(tempKey);
+        console.log('🗑️ TEMP: Immediately deleted meal data from Redis:', tempKey, '- Deleted:', deleted);
+      }
+      
+      console.log('✅ Temporary injection complete - Redis is clean');
       
       // Skip normal AI processing
     }
