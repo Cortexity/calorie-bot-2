@@ -658,7 +658,7 @@ const TOOL_SCHEMAS = {
   
   get_daily_progress: {
     name: "get_daily_progress", 
-    description: "Show standardized daily nutrition progress with traffic light indicators",
+    description: "Show standardized daily nutrition progress with traffic light indicators and goal tracking. Use this when user asks about progress, totals, how they're doing, or hitting their targets.",
     parameters: {
       type: "object",
       properties: {
@@ -670,7 +670,7 @@ const TOOL_SCHEMAS = {
 
   get_meal_history: {
     name: "get_meal_history",
-    description: "Show user's recent meal history and food entries",
+    description: "Show user's complete meal list for today with individual meal details. Use this when user asks things similar to 'what did I eat', 'show my meals', 'meal list', or 'food log'. Does NOT include daily progress totals.",
     parameters: {
       type: "object",
       properties: {
@@ -793,14 +793,16 @@ Examples that MUST be add_meal:
 Use the MEANING and CONTEXT behind the user's request (not just specific words), to determine the intent (VERY IMPORTANT RULE!):
 
 DAILY PROGRESS intent (nutrition totals/goals):
-- Any request about overall daily nutrition status
-- Questions about hitting targets or daily totals
-- "Progress", "daily progress", "how am I doing", "my numbers", "daily totals"
+- Any request about overall daily nutrition status and goal tracking
+- Questions about hitting targets, daily totals, or progress percentages
+- "Progress", "daily progress", "how am I doing", "my numbers", "daily totals", "am I on track"
+- Shows traffic light indicators and goal percentages
 
-MEAL HISTORY intent (what they ate):
-- Any request about specific foods they logged
-- Questions about recent meals or food entries  
-- "What did I eat", "last meal", "recent meals", "meal history", "food log"
+MEAL HISTORY intent (list of meals):
+- Any request about the LIST of foods they logged today
+- Questions about seeing their meal entries or food log
+- "What did I eat", "show my meals", "meal list", "food log", "what have I logged"
+- Shows individual meals with their macros, NOT daily totals
 
 MEAL OPERATIONS:
 - Mentions eating/consuming food → add_meal
@@ -2191,8 +2193,8 @@ Ready to start tracking? Just send me a photo of your meal or describe what you 
           mealHistoryText += `🧈 Fats: ${meal.fat} g\n\n`;
         });
         
-        // Add daily progress at the end
-        mealHistoryText += `⏳ *Daily Progress:*\n\n${bars(used, goals)}`;
+        // Add friendly closing
+        mealHistoryText += `That's everything you've logged today! 📝`;
         
         reply = mealHistoryText;
         console.log('✅ Standardized meal history generated with', todaysMeals.length, 'meals');
