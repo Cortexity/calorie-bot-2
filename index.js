@@ -174,8 +174,8 @@ const getUserSession = async (phone) => {
     
     if (sessionData) {
       const parsed = JSON.parse(sessionData);
-      console.log('🔄 Retrieved existing session for:', phone);
-      console.log('📝 Session details:', {
+      console.log('📄 Retrieved existing session for:', phone);
+      console.log('🔍 Session details:', {
         sessionId: parsed.sessionId,
         historyLength: parsed.conversationHistory?.length || 0,
         activeIntent: parsed.activeIntent,
@@ -197,9 +197,9 @@ const getUserSession = async (phone) => {
         lastQuestionContext: null
       };
       
-      // Store session with 24-hour expiry
-      await redisClient.setEx(sessionKey, 86400, JSON.stringify(newSession));
-      console.log('✨ Created new session for:', phone);
+      // Store session with 2-hour expiry (7200 seconds)
+      await redisClient.setEx(sessionKey, 7200, JSON.stringify(newSession));
+      console.log('✨ Created new session for:', phone, '(2-hour TTL)');
       return newSession;
     }
   } catch (error) {
@@ -217,18 +217,26 @@ const updateUserSession = async (phone, sessionData) => {
   
   try {
     const sessionKey = `user_session:${phone}`;
+    
+    // ENFORCE 5-MESSAGE ROLLING WINDOW
+    if (sessionData.conversationHistory && sessionData.conversationHistory.length > 5) {
+      sessionData.conversationHistory = sessionData.conversationHistory.slice(-5);
+      console.log('✂️ Trimmed conversation history to last 5 messages');
+    }
+    
     const serializedData = JSON.stringify(sessionData);
     
     console.log('💾 Updating session for:', phone);
     console.log('📊 Session data size:', serializedData.length, 'characters');
-    console.log('📝 Conversation history length:', sessionData.conversationHistory?.length || 0);
+    console.log('🔍 Conversation history length:', sessionData.conversationHistory?.length || 0);
     
-    await redisClient.setEx(sessionKey, 86400, serializedData);
+    // Store with 2-hour expiry (7200 seconds)
+    await redisClient.setEx(sessionKey, 7200, serializedData);
     
     // Verify the data was stored
     const verification = await redisClient.get(sessionKey);
     if (verification) {
-      console.log('✅ Session successfully stored and verified');
+      console.log('✅ Session successfully stored and verified (2-hour TTL)');
       return true;
     } else {
       console.log('❌ Session storage verification failed');
@@ -1537,13 +1545,20 @@ app.post('/webhook', async (req, res) => {
     userName: userProfile?.first_name || 'Unknown'
   });
 
-  // Debug conversation history content
+  // ============================================================================
+  // REDIS CACHE VISIBILITY - CLEAN VIEW OF ALL MESSAGES
+  // ============================================================================
+
   if (userSession?.conversationHistory && userSession.conversationHistory.length > 0) {
-    console.log('📚 CONVERSATION HISTORY DEBUG:');
-    userSession.conversationHistory.slice(-2).forEach((exchange, index) => {
-      console.log(`  ${index + 1}. User: "${exchange.userMessage}"`);
-      console.log(`     Bot: "${exchange.botResponse.substring(0, 100)}..."`);
+    console.log('\n📦 REDIS CACHE - ALL MESSAGES:');
+    userSession.conversationHistory.forEach((exchange, index) => {
+      const userMsg = exchange.userMessage.substring(0, 50);
+      const botMsg = exchange.botResponse.substring(0, 50);
+      console.log(`  [${index + 1}/${userSession.conversationHistory.length}] User: "${userMsg}..." | Bot: "${botMsg}..."`);
     });
+    console.log(`✅ Total in cache: ${userSession.conversationHistory.length}/5 messages\n`);
+  } else {
+    console.log('📦 REDIS CACHE: Empty (no conversation history)\n');
   }
 
   // ============================================================================
@@ -2000,11 +2015,8 @@ Available commands:
         questionAsked: questionType  // Track what question was asked
       });
       
-      // Keep only last 5 exchanges to manage memory
-      if (userSession.conversationHistory.length > 5) {
-        userSession.conversationHistory = userSession.conversationHistory.slice(-5);
-      }
-      
+     
+      // Note: 5-message limit enforced in updateUserSession
       console.log('📝 Conversation history updated with current exchange - Length:', userSession.conversationHistory.length);
     }
 
