@@ -287,23 +287,32 @@ const getCachedUserProfile = async (phone) => {
 // MEAL HISTORY RETRIEVAL SYSTEM
 // ============================================================================
 
-// Get user's meal history - ALWAYS from Supabase (no permanent caching)
+// Get user's meal history for TODAY - ALWAYS from Supabase (no permanent caching)
 const getUserMealHistory = async (phone, limit = 10) => {
   // REMOVED: Permanent Redis caching
   // Meal data should ONLY be temporarily cached during active LLM requests
-  console.log('🎯 Fetching meal history directly from Supabase (no cache)');
+  console.log('🎯 Fetching TODAY meal history directly from Supabase (no cache)');
   return await fetchMealHistoryFromSupabase(phone, limit);
 };
 
-// Fetch meal history from Supabase
+// Fetch TODAY's meal history from Supabase
 const fetchMealHistoryFromSupabase = async (phone, limit = 10) => {
   try {
-    console.log('🔍 Fetching meal history from Supabase for:', phone);
+    console.log('🔍 Fetching TODAY meal history from Supabase for:', phone);
+    
+    // Get today's date in YYYY-MM-DD format
+    const today = new Date().toISOString().slice(0, 10);
+    const todayStart = `${today}T00:00:00`;
+    const todayEnd = `${today}T23:59:59`;
+    
+    console.log('📅 Filtering meals for date:', today);
     
     const { data, error } = await db
       .from('meal_logs')
       .select('*')
       .eq('user_phone', phone)
+      .gte('created_at', todayStart)
+      .lte('created_at', todayEnd)
       .order('created_at', { ascending: false })
       .limit(limit);
     
@@ -312,7 +321,7 @@ const fetchMealHistoryFromSupabase = async (phone, limit = 10) => {
       return [];
     }
     
-    console.log('✅ Retrieved', data?.length || 0, 'meals from history');
+    console.log('✅ Retrieved', data?.length || 0, 'meals from TODAY');
     return data || [];
     
   } catch (error) {
