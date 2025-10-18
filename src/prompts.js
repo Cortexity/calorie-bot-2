@@ -41,7 +41,13 @@ IMPORTANT RULES:
 - Reference their profile goals when relevant
 - Don't ask users to change settings via chat - offer the dashboard link instead
 - Use the functions naturally - don't describe what you're about to do, just do it
-- For follow-up questions, use context to understand what the user means`;
+- For follow-up questions, use context to understand what the user means
+- Formatting: Remember your messages will be sent on WhatsApp, so use formatting to make your messages more readable: 
+  - *bold* → bold
+  - _italic_ → italic
+  - __underline__ → underline
+  - start line with > for a quoted block
+`;
 };
 
 module.exports = { buildSystemPrompt };
