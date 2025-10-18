@@ -1,10 +1,6 @@
 // index.js
 
 require('dotenv').config();
-
-// Initialize OpenTelemetry + Logfire tracing
-require('./tracing');
-
 console.log('🚀 DEPLOYMENT VERSION: 2.1 - MEAL DESCRIPTIONS ADDED - ' + new Date().toISOString());
 
 const express = require('express');
@@ -15,11 +11,13 @@ const { createClient } = require('@supabase/supabase-js');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 // Import OpenAI client for LangChain-style operations
 const { OpenAI } = require('openai');
+// Import LangSmith wrapper for LLM tracing
+const { wrapOpenAI } = require('langsmith/wrappers');
 
-// Initialize OpenAI client
-const openai = new OpenAI({
+// Initialize OpenAI client with LangSmith tracing
+const openai = wrapOpenAI(new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-});
+}));
 
 // ============================================================================
 // REDIS SETUP FOR CONVERSATION MEMORY
@@ -1829,14 +1827,14 @@ Available commands:
     }
     
     console.log('💰 MAKING CONTEXT-AWARE OPENAI API CALL for intent:', intentClassification.intent);
-    const contextualGpt = await axios.post('https://api.openai.com/v1/chat/completions', {
+    const contextualGpt = await openai.chat.completions.create({
       model: 'gpt-5-chat-latest',
       messages: contextualMsgs,
       max_tokens: 700,
       temperature: 0.1
-    }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
-    
-    reply = contextualGpt.data.choices[0].message.content;
+    });
+
+    reply = contextualGpt.choices[0].message.content;
     console.log('🎭 Context-aware response generated for', intentClassification.intent);
     
     console.log('🎭 FINAL RESPONSE GENERATED:', reply.substring(0, 100) + '...');
@@ -2000,14 +1998,14 @@ Available commands:
         }
         
         console.log('💰 MAKING OPENAI API CALL for meal update');
-        const updateResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
+        const updateResponse = await openai.chat.completions.create({
           model: 'gpt-5-chat-latest',
           messages: contextualMsgs,
           max_tokens: 700,
           temperature: 0.1
-        }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
-        
-        reply = updateResponse.data.choices[0].message.content;
+        });
+
+        reply = updateResponse.choices[0].message.content;
         console.log('🎭 Update response generated');
         
         // Extract NEW macros from the AI response
@@ -2172,14 +2170,14 @@ Available commands:
           }
           
           console.log('💰 MAKING OPENAI API CALL for delete confirmation');
-          const deleteResponse = await axios.post('https://api.openai.com/v1/chat/completions', {
+          const deleteResponse = await openai.chat.completions.create({
             model: 'gpt-5-chat-latest',
             messages: contextualMsgs,
             max_tokens: 400,
             temperature: 0.1
-          }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
-          
-          reply = deleteResponse.data.choices[0].message.content;
+          });
+
+          reply = deleteResponse.choices[0].message.content;
           console.log('🎭 Delete confirmation response generated');
           
           // STEP 4: IMMEDIATELY delete temp data after LLM response
@@ -2266,14 +2264,14 @@ Ready to start tracking? Just send me a photo of your meal or describe what you 
       }
       
       console.log('💰 MAKING OPENAI API CALL with temporary meal context');
-      const contextualGpt = await axios.post('https://api.openai.com/v1/chat/completions', {
+      const contextualGpt = await openai.chat.completions.create({
         model: 'gpt-5-chat-latest',
         messages: contextualMsgs,
         max_tokens: 700,
         temperature: 0.1
-      }, { headers: { Authorization: `Bearer ${OA_KEY}` } });
-      
-      reply = contextualGpt.data.choices[0].message.content;
+      });
+
+      reply = contextualGpt.choices[0].message.content;
       console.log('🎭 LLM response generated with meal context');
       
       // STEP 4: IMMEDIATELY delete temp data after LLM response
