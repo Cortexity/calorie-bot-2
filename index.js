@@ -1,6 +1,10 @@
 // index.js
 
 require('dotenv').config();
+
+// Initialize OpenTelemetry + Logfire tracing
+require('./tracing');
+
 console.log('🚀 DEPLOYMENT VERSION: 2.1 - MEAL DESCRIPTIONS ADDED - ' + new Date().toISOString());
 
 const express = require('express');
