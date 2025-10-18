@@ -92,79 +92,6 @@ const QUESTION_TYPES = {
   NONE: 'none'
 };
 
-// Enhanced debug logging for conversation history
-const debugConversationHistory = (userSession, stage, additionalInfo = {}) => {
-  console.log(`\n🔍 CONVERSATION DEBUG - STAGE: ${stage}`);
-  console.log(`📞 Phone: ${additionalInfo.phone || 'Unknown'}`);
-  console.log(`📝 Current Message: "${additionalInfo.currentMessage || 'N/A'}"`);
-  console.log(`⏰ Timestamp: ${new Date().toISOString()}`);
-  
-  if (!userSession) {
-    console.log(`❌ No user session found`);
-    return;
-  }
-  
-  console.log(`📊 Session Info:`);
-  console.log(`   - Session ID: ${userSession.sessionId}`);
-  console.log(`   - Start Time: ${userSession.startTime}`);
-  console.log(`   - Active Intent: ${userSession.activeIntent || 'None'}`);
-  
-  const history = userSession.conversationHistory || [];
-  console.log(`📚 Conversation History Length: ${history.length}`);
-  
-  if (history.length === 0) {
-    console.log(`   - No conversation history`);
-  } else {
-    console.log(`📜 Full Conversation History:`);
-    history.forEach((exchange, index) => {
-      console.log(`   [${index + 1}] ${exchange.timestamp}`);
-      console.log(`       User: "${exchange.userMessage}"`);
-      console.log(`       Bot:  "${exchange.botResponse?.substring(0, 100)}${exchange.botResponse?.length > 100 ? '...' : ''}"`);
-      console.log(`       Type: ${exchange.messageType}`);
-    });
-  }
-  
-  // Show what the AI would see as context
-  if (history.length > 0) {
-    console.log(`\n🤖 AI CONTEXT THAT WOULD BE BUILT:`);
-    const recentExchanges = history.slice(-3);
-    recentExchanges.forEach((exchange, index) => {
-      console.log(`   [${recentExchanges.length - index} exchanges ago]`);
-      console.log(`   User: "${exchange.userMessage}"`);
-      console.log(`   Your response: "${exchange.botResponse?.substring(0, 150)}..."`);
-    });
-  }
-  
-  console.log(`\n${'-'.repeat(80)}\n`);
-};
-
-// Debug intent classification with conversation context
-const debugIntentClassification = (userMessage, contextHistory, classification) => {
-  console.log(`\n🎯 INTENT CLASSIFICATION DEBUG`);
-  console.log(`📝 User Message: "${userMessage}"`);
-  console.log(`📚 Context History Available: ${contextHistory ? 'YES' : 'NO'}`);
-  
-  if (contextHistory) {
-    console.log(`📖 Context Preview: "${contextHistory.substring(0, 200)}..."`);
-  }
-  
-  console.log(`🎯 Classified Intent: ${classification.intent}`);
-  console.log(`📊 Confidence: ${classification.confidence}`);
-  console.log(`💭 Reasoning: ${classification.reasoning}`);
-  console.log(`📋 Extracted Params:`, classification.extracted_params);
-  
-  // Special check for follow-up responses
-  const isLikelyFollowUp = /^(yes|no|sure|okay|yep|nope|maybe|definitely|absolutely)$/i.test(userMessage.trim());
-  if (isLikelyFollowUp) {
-    console.log(`🚨 FOLLOW-UP DETECTED: "${userMessage}" looks like a response to a previous question`);
-    if (!contextHistory) {
-      console.log(`❌ BUT NO CONTEXT HISTORY PROVIDED TO CLASSIFIER!`);
-    }
-  }
-  
-  console.log(`\n${'-'.repeat(80)}\n`);
-};
-
 // Get or create user session
 const getUserSession = async (phone) => {
   if (!redisClient) {
@@ -757,156 +684,6 @@ const TOOL_SCHEMAS = {
     }
   }
 };
-
-// Intent classification function
-async function classifyIntentAndExtractParams(userMessage, conversationContext, userProfile, mUrl = null, mType = null, userSession = null) {
-  // Pass the session context to help AI understand better
-  const lastQuestionInfo = userSession?.lastQuestionType ? 
-    `\nLAST BOT INTERACTION: The bot just asked a ${userSession.lastQuestionContext} question.` : '';
-  
-  const systemPrompt = `You are an expert intent classifier for a nutrition tracking app.
-${lastQuestionInfo}
-
-CRITICAL CLASSIFICATION PRIORITY:
-1. ANY mention of food items (pasta, bread, eggs, cereal, etc.) = ALWAYS classify as add_meal
-2. Food with quantities (2 eggs, 200g pasta) = ALWAYS add_meal
-3. Past tense eating (had, ate, consumed) + food = ALWAYS add_meal
-4. Only use no_tool_needed for actual conversation, NOT for food logging
-
-CONTEXT UNDERSTANDING:
-- Short affirmative responses are responding to the bot's last question
-- Ordinal selections are selecting from the bot's last provided list
-- Short negative responses are declining the bot's last offer
-
-Analyze the user's message and determine which tool/action is needed:
-
-- add_meal: User is logging food they consumed: ANY food mention, even single words like "pasta" or "bread" or other food items 
-- update_meal: User is correcting/modifying a recent meal entry  
-- delete_meal: User wants to remove a meal entry
-- get_daily_progress: User wants to see their daily nutrition totals/progress
-- get_meal_history: User wants to see what meals they've logged recently
-- profile_change_attempt: User wants to modify their profile settings
-- get_user_profile: User asks about their current profile information
-- no_tool_needed: General conversation, recipes, meal suggestions, OR responses to bot questions
-
-SEMANTIC CLASSIFICATION RULES:
-FOOD ITEMS OVERRIDE: If the message contains ANY food item name, it's add_meal regardless of brevity.
-Examples that MUST be add_meal:
-- "pasta" → add_meal (don't ask for details)
-- "had cereals" → add_meal (don't ask what kind)
-- "just ate bread" → add_meal (don't ask how much)
-- "2 eggs" → add_meal (has food + quantity)
-
-Use the MEANING and CONTEXT behind the user's request (not just specific words), to determine the intent (VERY IMPORTANT RULE!):
-
-DAILY PROGRESS intent (nutrition totals/goals):
-- Any request about overall daily nutrition status and goal tracking
-- Questions about hitting targets, daily totals, or progress percentages
-- "Progress", "daily progress", "how am I doing", "my numbers", "daily totals", "am I on track"
-- Shows traffic light indicators and goal percentages
-
-MEAL HISTORY intent (list of meals):
-- Any request about the LIST of foods they logged today
-- Questions about seeing their meal entries or food log
-- "What did I eat", "show my meals", "meal list", "food log", "what have I logged"
-- Shows individual meals with their macros, NOT daily totals
-
-MEAL OPERATIONS:
-- Mentions eating/consuming food → add_meal
-- Correcting previous entry → update_meal  
-- Removing an entry → delete_meal
-
-Default to the user's TRUE INTENT, regardless of exact wording.
-
-USER PROFILE: ${userProfile ? JSON.stringify(userProfile, null, 2) : 'No profile data'}
-CONVERSATION: ${conversationContext || 'No previous conversation'}
-
-Respond ONLY with JSON:
-{
-  "intent": "tool_name",
-  "confidence": 0.95,
-  "extracted_params": {},
-  "reasoning": "Brief explanation"
-}`;
-
-  try {
-    console.log('🧠 INTENT CLASSIFICATION: Starting analysis...');
-console.log('🔍 Analyzing message type - Image:', !!mUrl, 'Text:', userMessage || 'empty');
-
-// Handle image-based messages
-const messages = [
-  { role: 'system', content: systemPrompt }
-];
-
-if (mUrl && mType && mType.startsWith('image/')) {
-  console.log('📸 IMAGE DETECTED: Classifying as food image');
-  // For food images, always classify as add_meal
-  const imageClassification = {
-    intent: 'add_meal',
-    confidence: 0.95,
-    extracted_params: {},
-    reasoning: 'Food image detected - automatically classified as meal logging'
-  };
-  
-  console.log('🎯 IMAGE INTENT DETECTED:', imageClassification.intent);
-  console.log('📊 Confidence:', imageClassification.confidence);
-  console.log('💭 Reasoning:', imageClassification.reasoning);
-  
-  return imageClassification;
-} else {
-  messages.push({ role: 'user', content: userMessage });
-}
-
-const response = await openai.chat.completions.create({
-  model: 'gpt-5-chat-latest',
-  messages: messages,
-  max_tokens: 300,
-  temperature: 0.1
-});
-
-    const classification = JSON.parse(response.choices[0].message.content);
-    
-    console.log('🎯 INTENT DETECTED:', classification.intent);
-    console.log('📊 Confidence:', classification.confidence);
-    console.log('💭 Reasoning:', classification.reasoning);
-    
-    return classification;
-    
-  } catch (error) {
-    console.error('❌ Intent classification failed:', error);
-    
-    // Simple fallback
-    const fallbackIntent = simpleIntentFallback(userMessage, conversationContext);
-    return {
-      intent: fallbackIntent,
-      confidence: 0.6,
-      extracted_params: {},
-      reasoning: 'Fallback classification'
-    };
-  }
-}
-
-// Enhanced fallback intent detection with follow-up support
-function simpleIntentFallback(message, contextHistory = '') {
-  const msg = message.toLowerCase().trim();
-  
-  // Check for follow-up responses first
-  const isFollowUp = /^(yes|yeah|yep|sure|okay|ok|definitely|absolutely|please|no|nope|nah|not really)$/i.test(msg);
-  const isListSelection = /^(first|second|third|fourth|1st|2nd|3rd|4th|option 1|option 2|number one|number two|first one|second one)$/i.test(msg);
-  
-  if ((isFollowUp || isListSelection) && contextHistory) {
-    // If it's a follow-up or list selection and we have context, treat as conversational
-    console.log('🔄 FALLBACK: Follow-up or selection response detected with context');
-    return 'no_tool_needed';
-  }
-  
-  if (/^progress$|daily progress|show.*progress/.test(msg)) return 'show_progress';
-  if (/delete|remove|didn't eat|cancel/.test(msg)) return 'delete_meal';
-  if (/actually|instead|correction|meant/.test(msg)) return 'update_meal';
-  if (/ate|had|eating|breakfast|lunch|dinner|snack/.test(msg)) return 'add_meal';
-  
-  return 'no_tool_needed';
-}
 
 // Universal context builder for all OpenAI calls
 function buildContextAwareSystemPrompt(intent, userProfile, userSession, userFirstName) {
@@ -1751,10 +1528,10 @@ Available commands:
     const used = { kcal: row.kcal_used, prot: row.prot_used, carb: row.carb_used, fat: row.fat_used };
 
     // ============================================================================
-    // UNIFIED REACT AGENT WITH FUNCTION CALLING
+    // REACT AGENT WITH MULTI-TURN TOOL CALLING LOOP
     // ============================================================================
 
-    console.log('🧠 STARTING UNIFIED REACT AGENT WITH FUNCTION CALLING');
+    console.log('🧠 STARTING REACT AGENT WITH FUNCTION CALLING LOOP');
 
     // Build system prompt
     const systemPrompt = buildSystemPrompt(userProfile, userFirstName);
@@ -1806,51 +1583,113 @@ Available commands:
       });
     }
 
-    console.log('💰 MAKING SINGLE OPENAI API CALL WITH FUNCTION CALLING');
-    const response = await openai.chat.completions.create({
-      model: 'gpt-5-chat-latest',
-      messages: messages,
-      tools: getFunctionDefinitions(),
-      tool_choice: 'auto',
-      temperature: 0.3,
-      max_tokens: 1024
-    });
+    // ============================================================================
+    // REACT LOOP: Keep calling tools until LLM generates final response
+    // ============================================================================
 
-    console.log('✅ OpenAI response received');
+    let reply = '';
+    let continueLoop = true;
+    let iterations = 0;
+    const maxIterations = 5; // Safety limit to prevent infinite loops
+    let lastDashboardLink = null; // Track if we need dashboard link handling
 
-    let reply;
-    const assistantMessage = response.choices[0].message;
+    while (continueLoop && iterations < maxIterations) {
+      iterations++;
+      console.log(`\n🔄 REACT LOOP ITERATION ${iterations}/${maxIterations}`);
 
-    // Check if LLM called a function
-    if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-      const toolCall = assistantMessage.tool_calls[0];
-      const functionName = toolCall.function.name;
-      const functionArgs = JSON.parse(toolCall.function.arguments);
-
-      console.log('🔧 Function called:', functionName, 'with args:', functionArgs);
-
-      // Execute the tool
-      const toolResult = await executeTool(functionName, functionArgs, {
-        phone,
-        userProfile,
-        userSession,
-        db,
-        today,
-        redisClient
+      // Make OpenAI API call with function definitions
+      console.log('💰 Calling OpenAI with tools...');
+      const response = await openai.chat.completions.create({
+        model: 'gpt-5-chat-latest',
+        messages: messages,
+        tools: getFunctionDefinitions(),
+        tool_choice: 'auto',
+        temperature: 0.3,
+        max_tokens: 1024
       });
 
-      console.log('✅ Tool executed:', functionName, 'Result:', toolResult);
+      const assistantMessage = response.choices[0].message;
+      console.log('✅ OpenAI response received');
 
-      // Handle dashboard link generation specially
-      if (toolResult.action === 'generate_dashboard_link') {
-        try {
-          const dashboardResponse = await axios.post(`${process.env.BASE_URL || 'http://localhost:8080'}/api/generate-dashboard-link`, {
-            phone_number: phone
+      // Check if LLM called any functions
+      if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+        console.log(`🔧 LLM called ${assistantMessage.tool_calls.length} tool(s)`);
+
+        // Add the assistant's message with tool calls to conversation
+        messages.push(assistantMessage);
+
+        // Execute ALL tools returned by the LLM
+        const toolResults = [];
+
+        for (const toolCall of assistantMessage.tool_calls) {
+          const functionName = toolCall.function.name;
+          const functionArgs = JSON.parse(toolCall.function.arguments);
+
+          console.log(`  📍 Executing: ${functionName}`);
+
+          // Execute the tool
+          const toolResult = await executeTool(functionName, functionArgs, {
+            phone,
+            userProfile,
+            userSession,
+            db,
+            today,
+            redisClient
           });
 
-          const { dashboard_url, user_name } = dashboardResponse.data;
+          console.log(`  ✅ ${functionName} completed`);
 
-          const dashboardMessage = `Hi ${user_name || 'there'}! 👋
+          // Handle dashboard link generation specially
+          if (toolResult.action === 'generate_dashboard_link') {
+            lastDashboardLink = toolResult;
+            console.log(`  🔗 Dashboard link requested (will handle after loop)`);
+          }
+
+          // Add tool result to conversation
+          toolResults.push({
+            tool_call_id: toolCall.id,
+            result: toolResult
+          });
+        }
+
+        // Add all tool results to messages at once
+        for (const { tool_call_id, result } of toolResults) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: tool_call_id,
+            content: JSON.stringify(result)
+          });
+        }
+
+        console.log(`📨 Added ${toolResults.length} tool result(s) to conversation`);
+        // Loop continues - LLM will process results in next iteration
+      } else {
+        // No tool calls - LLM generated final response
+        reply = assistantMessage.content;
+        continueLoop = false;
+        console.log(`💬 LLM generated final response (loop complete after ${iterations} iteration(s))`);
+      }
+    }
+
+    // Safety check: if we hit max iterations, get what we have
+    if (iterations >= maxIterations) {
+      console.warn('⚠️ REACT loop hit max iterations limit');
+      if (!reply) {
+        reply = 'I got a bit overwhelmed with that request. Please try again!';
+      }
+    }
+
+    // Handle dashboard link if it was requested during the loop
+    if (lastDashboardLink) {
+      try {
+        console.log('🔗 Generating dashboard link...');
+        const dashboardResponse = await axios.post(`${process.env.BASE_URL || 'http://localhost:8080'}/api/generate-dashboard-link`, {
+          phone_number: phone
+        });
+
+        const { dashboard_url, user_name } = dashboardResponse.data;
+
+        reply = `Hi ${user_name || 'there'}! 👋
 
 🔗 Access your personal dashboard here:
 ${dashboard_url}
@@ -1863,38 +1702,16 @@ From your dashboard you can:
 
 This link is personalized for your account. Keep it secure!`;
 
-          reply = dashboardMessage;
-        } catch (error) {
-          console.error('❌ Error generating dashboard link:', error);
-          reply = 'Sorry, I had trouble generating your dashboard link. Please try again later.';
-        }
-      } else {
-        // Send tool result back to LLM for natural incorporation
-        messages.push(assistantMessage);
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          content: JSON.stringify(toolResult)
-        });
-
-        console.log('💰 MAKING FOLLOW-UP OPENAI CALL TO INCORPORATE TOOL RESULT');
-        const finalResponse = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: messages,
-          temperature: 0.3,
-          max_tokens: 512
-        });
-
-        reply = finalResponse.choices[0].message.content;
-        console.log('✅ Follow-up response generated with tool result incorporated');
+        console.log('✅ Dashboard link generated and incorporated');
+      } catch (error) {
+        console.error('❌ Error generating dashboard link:', error);
+        // Still use the LLM response if dashboard link fails
       }
-    } else {
-      // No tool needed, just natural conversation
-      reply = assistantMessage.content;
-      console.log('💬 Natural response generated (no tool call)');
     }
 
-    console.log('🎭 FINAL RESPONSE GENERATED:', reply.substring(0, 100) + '...');
+    console.log('🎭 REACT AGENT COMPLETE');
+    console.log(`📊 Total iterations: ${iterations}`);
+    console.log(`📝 Final response: ${reply.substring(0, 100)}...`);
 
     // ============================================================================
     // UPDATE CONVERSATION HISTORY WITH CURRENT EXCHANGE
