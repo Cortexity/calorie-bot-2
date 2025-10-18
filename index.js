@@ -19,6 +19,11 @@ const openai = wrapOpenAI(new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 }));
 
+// Import new ReAct agent modules
+const { getFunctionDefinitions } = require('./src/functions');
+const { buildSystemPrompt } = require('./src/prompts');
+const { executeTool } = require('./src/tools');
+
 // ============================================================================
 // REDIS SETUP FOR CONVERSATION MEMORY
 // ============================================================================
@@ -220,10 +225,10 @@ const updateUserSession = async (phone, sessionData) => {
   try {
     const sessionKey = `user_session:${phone}`;
     
-    // ENFORCE 5-MESSAGE ROLLING WINDOW
-    if (sessionData.conversationHistory && sessionData.conversationHistory.length > 5) {
-      sessionData.conversationHistory = sessionData.conversationHistory.slice(-5);
-      console.log('✂️ Trimmed conversation history to last 5 messages');
+    // ENFORCE 10-MESSAGE ROLLING WINDOW (extended from 5 for better context)
+    if (sessionData.conversationHistory && sessionData.conversationHistory.length > 10) {
+      sessionData.conversationHistory = sessionData.conversationHistory.slice(-10);
+      console.log('✂️ Trimmed conversation history to last 10 messages');
     }
     
     const serializedData = JSON.stringify(sessionData);
@@ -1499,7 +1504,15 @@ app.post('/webhook', async (req, res) => {
   const rawPhone = from.replace('whatsapp:', '');
   const phone = normalizePhoneNumber(rawPhone);
   console.log('📞 Phone normalization:', rawPhone, '->', phone);
-  
+
+  // Check for video and reject
+  const isVideo = mType.startsWith('video/');
+  if (isVideo) {
+    console.log('🚫 Video detected and rejected');
+    twiml.message('Sorry, I can only analyze images of food, not videos. Please send a photo instead! 📸');
+    return res.type('text/xml').send(twiml.toString());
+  }
+
   // 🔒 SECURITY CHECK: Verify user authorization FIRST
   const authResult = await verifyUserAuthorization(phone);
   
@@ -1737,654 +1750,169 @@ Available commands:
     const goals = { kcal: row.kcal_goal, prot: row.prot_goal, carb: row.carb_goal, fat: row.fat_goal };
     const used = { kcal: row.kcal_used, prot: row.prot_used, carb: row.carb_used, fat: row.fat_used };
 
-    // ============================================================================f
-    // ENHANCED AI PROCESSING WITH LANGCHAIN INTENT CLASSIFICATION
     // ============================================================================
-    
-    console.log('🧠 STARTING ENHANCED AI PROCESSING WITH LANGCHAIN');
-    
-    // Build conversation history context - ENHANCED for better follow-up understanding
-    const contextHistory = userSession?.conversationHistory 
-      ? userSession.conversationHistory.slice(-3).map(exchange => {
-          // For images, use the bot's response to infer what the user asked about
-          const userMsg = exchange.userMessage === '[image]' 
-            ? 'User sent food image' 
-            : exchange.userMessage;
-          // Include MORE of the bot response to preserve question context
-          return `User: ${userMsg}\nBot: ${exchange.botResponse.substring(0, 250)}`;
-        }).join('\n\n')
-      : '';
-    
-    // Check if this is a follow-up response to a specific question type
-    const isFollowUpResponse = /^(yes|yeah|yep|sure|okay|ok|no|nope|nah|not really|definitely|absolutely|please)$/i.test(text?.trim() || '');
-    
-    if (isFollowUpResponse && userSession?.lastQuestionType) {
-      console.log('🔄 FOLLOW-UP DETECTED:', {
-        response: text,
-        lastQuestionType: userSession.lastQuestionType,
-        lastQuestionContext: userSession.lastQuestionContext
+    // UNIFIED REACT AGENT WITH FUNCTION CALLING
+    // ============================================================================
+
+    console.log('🧠 STARTING UNIFIED REACT AGENT WITH FUNCTION CALLING');
+
+    // Build system prompt
+    const systemPrompt = buildSystemPrompt(userProfile, userFirstName);
+
+    // Build messages array with conversation history
+    const messages = [
+      {
+        role: 'system',
+        content: systemPrompt
+      }
+    ];
+
+    // Add conversation history (last 10 messages)
+    if (userSession?.conversationHistory && userSession.conversationHistory.length > 0) {
+      const recentExchanges = userSession.conversationHistory.slice(-10);
+      recentExchanges.forEach(exchange => {
+        messages.push({
+          role: 'user',
+          content: exchange.userMessage
+        });
+        messages.push({
+          role: 'assistant',
+          content: exchange.botResponse
+        });
       });
     }
-    
-    // Classify intent and extract parameters
-    const intentClassification = await classifyIntentAndExtractParams(
-      text, 
-      contextHistory, 
-      userProfile,
-      mUrl,
-      mType,
-      userSession
-    );
-    
-    console.log('🎯 FINAL INTENT:', intentClassification.intent);
-    console.log('📊 CONFIDENCE:', intentClassification.confidence);
-    
-    // Enhance parameters with user context
-    const enhancedParams = enhanceParametersWithContext(
-      intentClassification.intent,
-      intentClassification.extracted_params,
-      userProfile
-    );
-    
-    // Execute the appropriate action based on intent
-    let reply;
-    
-    // ============================================================================
-    // UNIVERSAL CONTEXT-AWARE RESPONSE GENERATION
-    // ============================================================================
-    
-    console.log('🎭 GENERATING CONTEXT-AWARE RESPONSE for intent:', intentClassification.intent);
-    
-    // Build context-aware system prompt for this intent
-    const contextAwarePrompt = buildContextAwareSystemPrompt(
-      intentClassification.intent,
-      userProfile,
-      userSession,
-      userFirstName
-    );
-    
-    // Prepare messages array with full context
-    const contextualMsgs = [{
-      role: 'system',
-      content: contextAwarePrompt
-    }];
 
+    // Add current message (text or image)
     if (isImg && mUrl) {
       const auth = { Authorization: 'Basic ' + Buffer.from(`${ACC}:${TOK}`).toString('base64') };
       const img = await axios.get(mUrl, { responseType: 'arraybuffer', headers: auth });
       const b64 = Buffer.from(img.data, 'binary').toString('base64');
-      contextualMsgs.push({
+      messages.push({
         role: 'user',
         content: [
           { type: 'image_url', image_url: { url: `data:${mType};base64,${b64}` } },
-          { type: 'text', text: 'Log this meal using the standardized format with 18 words or less strictly of analysis commentary on top of the standardized format. ' }
+          { type: 'text', text: 'Please analyze this food photo and log it as a meal.' }
         ]
       });
     } else if (text) {
-      contextualMsgs.push({ role: 'user', content: text });
+      messages.push({
+        role: 'user',
+        content: text
+      });
     } else {
-      contextualMsgs.push({ role: 'user', content: 'Hi' });
+      messages.push({
+        role: 'user',
+        content: 'Hi'
+      });
     }
-    
-    console.log('💰 MAKING CONTEXT-AWARE OPENAI API CALL for intent:', intentClassification.intent);
-    const contextualGpt = await openai.chat.completions.create({
+
+    console.log('💰 MAKING SINGLE OPENAI API CALL WITH FUNCTION CALLING');
+    const response = await openai.chat.completions.create({
       model: 'gpt-5-chat-latest',
-      messages: contextualMsgs,
-      max_tokens: 700,
-      temperature: 0.1
+      messages: messages,
+      tools: getFunctionDefinitions(),
+      tool_choice: 'auto',
+      temperature: 0.3,
+      max_tokens: 1024
     });
 
-    reply = contextualGpt.choices[0].message.content;
-    console.log('🎭 Context-aware response generated for', intentClassification.intent);
-    
+    console.log('✅ OpenAI response received');
+
+    let reply;
+    const assistantMessage = response.choices[0].message;
+
+    // Check if LLM called a function
+    if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+      const toolCall = assistantMessage.tool_calls[0];
+      const functionName = toolCall.function.name;
+      const functionArgs = JSON.parse(toolCall.function.arguments);
+
+      console.log('🔧 Function called:', functionName, 'with args:', functionArgs);
+
+      // Execute the tool
+      const toolResult = await executeTool(functionName, functionArgs, {
+        phone,
+        userProfile,
+        userSession,
+        db,
+        today,
+        redisClient
+      });
+
+      console.log('✅ Tool executed:', functionName, 'Result:', toolResult);
+
+      // Handle dashboard link generation specially
+      if (toolResult.action === 'generate_dashboard_link') {
+        try {
+          const dashboardResponse = await axios.post(`${process.env.BASE_URL || 'http://localhost:8080'}/api/generate-dashboard-link`, {
+            phone_number: phone
+          });
+
+          const { dashboard_url, user_name } = dashboardResponse.data;
+
+          const dashboardMessage = `Hi ${user_name || 'there'}! 👋
+
+🔗 Access your personal dashboard here:
+${dashboard_url}
+
+From your dashboard you can:
+- Update your profile information
+- Adjust your calorie and macro goals
+- Manage your subscription
+- View your account details
+
+This link is personalized for your account. Keep it secure!`;
+
+          reply = dashboardMessage;
+        } catch (error) {
+          console.error('❌ Error generating dashboard link:', error);
+          reply = 'Sorry, I had trouble generating your dashboard link. Please try again later.';
+        }
+      } else {
+        // Send tool result back to LLM for natural incorporation
+        messages.push(assistantMessage);
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(toolResult)
+        });
+
+        console.log('💰 MAKING FOLLOW-UP OPENAI CALL TO INCORPORATE TOOL RESULT');
+        const finalResponse = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: messages,
+          temperature: 0.3,
+          max_tokens: 512
+        });
+
+        reply = finalResponse.choices[0].message.content;
+        console.log('✅ Follow-up response generated with tool result incorporated');
+      }
+    } else {
+      // No tool needed, just natural conversation
+      reply = assistantMessage.content;
+      console.log('💬 Natural response generated (no tool call)');
+    }
+
     console.log('🎭 FINAL RESPONSE GENERATED:', reply.substring(0, 100) + '...');
 
     // ============================================================================
     // UPDATE CONVERSATION HISTORY WITH CURRENT EXCHANGE
     // ============================================================================
-    
+
     if (userSession) {
-      // Detect if bot asked a question in its response - ENHANCED detection
-      let questionType = 'none';
-      let questionContext = null;
-      let listItems = null;
-      
-      if (reply) {
-        // Check for list offerings first
-        if (/do you want me to (put together|create|make|give you) a.*list/i.test(reply) ||
-            /would you like me to.*list/i.test(reply)) {
-          questionType = QUESTION_TYPES.LIST_OFFERING;
-          questionContext = 'offering to create a list';
-          console.log('📋 Bot offered to create a list');
-        }
-        // Check if bot provided numbered/bulleted options
-        else if (/\*\*1\.|^1\.|#1/m.test(reply) || /first.*option.*second.*option/i.test(reply)) {
-          questionType = QUESTION_TYPES.SELECTION_FROM_LIST;
-          questionContext = 'provided list for selection';
-          // Try to extract list items
-          const listMatches = reply.match(/(?:\*\*|^)(\d+\..*?)(?=\n|$)/gm);
-          if (listMatches) {
-            listItems = listMatches.map(item => item.trim());
-            console.log('📝 Bot provided list with', listItems.length, 'items');
-          }
-        }
-        // Dessert suggestion
-        else if (/would you like me to (suggest|recommend) a (dessert|sweet)/i.test(reply)) {
-          questionType = QUESTION_TYPES.DESSERT_SUGGESTION;
-          questionContext = 'dessert suggestion';
-          console.log('🍰 Bot asked about dessert suggestion');
-        }
-        // Yes/No questions
-        else if (/\?[\s]*$/m.test(reply) && /\b(do you want|would you like|shall I|should I|can I)\b/i.test(reply)) {
-          questionType = QUESTION_TYPES.YES_NO_QUESTION;
-          questionContext = 'yes/no question';
-          console.log('❓ Bot asked a yes/no question');
-        }
-        // General follow-up
-        else if (/would you like|do you want|shall I/i.test(reply)) {
-          questionType = QUESTION_TYPES.GENERAL_FOLLOWUP;
-          questionContext = 'general follow-up';
-          console.log('❓ Bot asked a general follow-up question');
-        }
-      }
-      
-      // Store the question type and any list items for next interaction
-      userSession.lastQuestionType = questionType;
-      userSession.lastQuestionContext = questionContext;
-      if (listItems) {
-        userSession.lastListItems = listItems;
-      }
-      
-      // Store the question type for next interaction
-      userSession.lastQuestionType = questionType;
-      userSession.lastQuestionContext = questionContext;
-      
       // Add this exchange to conversation history
       userSession.conversationHistory.push({
         timestamp: new Date().toISOString(),
         userMessage: text || (isImg ? '[image]' : '[audio]'),
         botResponse: reply,
-        messageType: isImg ? 'image' : (isAudio ? 'audio' : 'text'),
-        macrosLogged: null,
-        questionAsked: questionType  // Track what question was asked
+        messageType: isImg ? 'image' : (isAudio ? 'audio' : 'text')
       });
-      
-     
-      // Note: 5-message limit enforced in updateUserSession
+
       console.log('📝 Conversation history updated with current exchange - Length:', userSession.conversationHistory.length);
     }
-
-    // ============================================================================
-    // INTENT-BASED RESPONSE HANDLING
-    // ============================================================================
-
-    console.log('🎯 LangChain classified intent:', intentClassification.intent);
-    console.log('📊 Confidence level:', intentClassification.confidence);
-
-    // Handle profile change attempts with dashboard redirection
-    if (intentClassification.intent === 'profile_change_attempt') {
-      console.log('🚫 PROFILE CHANGE BLOCKED - Redirecting to dashboard');
-      
-      reply = await handleProfileChangeAttempt(
-        intentClassification.intent,
-        enhancedParams,
-        phone,
-        userFirstName,
-        userSession
-      );
-      
-      // Skip normal AI processing for profile changes
-    } 
-    // Handle profile information requests
-    else if (intentClassification.intent === 'get_user_profile') {
-      console.log('👤 PROFILE INFO REQUEST - Showing cached data');
-      
-      reply = await handleUserProfileRequest(
-        intentClassification.intent,
-        enhancedParams,
-        userProfile,
-        userFirstName
-      );
-      
-      // Skip normal AI processing for profile requests
-    }
-    // Handle meal updates with database modification and temporary injection
-    else if (intentClassification.intent === 'update_meal') {
-      console.log('🔧 MEAL UPDATE REQUEST - Using temporary meal injection');
-      
-      // STEP 1: Fetch the most recent meal from Supabase
-      const recentMeals = await getUserMealHistory(phone, 1);
-      
-      if (!recentMeals || recentMeals.length === 0) {
-        reply = "I don't see any recent meals to update. Please log a meal first, then I can help you adjust it! 🍽️";
-      } else {
-        const lastMeal = recentMeals[0];
-        console.log('🎯 Updating meal:', lastMeal.meal_description, 'ID:', lastMeal.id);
-        
-        // STEP 2: Temporarily store in Redis (5-min TTL as safety)
-        let tempKey = null;
-        if (redisClient) {
-          tempKey = `temp:meals:${phone}:${Date.now()}`;
-          await redisClient.setEx(tempKey, 300, JSON.stringify([lastMeal]));
-          console.log('📦 TEMP: Stored meal data in Redis:', tempKey);
-        }
-        
-        // STEP 3: Generate updated meal with AI using standardized format
-        const contextualMsgs = [{
-          role: 'system',
-          content: buildContextAwareSystemPrompt(intentClassification.intent, userProfile, userSession, userFirstName) + 
-          `\n\nCURRENT MEAL TO UPDATE: ${lastMeal.meal_description} (${lastMeal.kcal} kcal, ${lastMeal.prot}g protein, ${lastMeal.carb}g carbs, ${lastMeal.fat}g fat)\n\nUser wants to adjust this meal. Generate the updated version using this EXACT format:
-
-✅ *Meal updated successfully!*
-
-🍽️ *<MealType>:* <updated meal description>
-🔥 *Calories:* <kcal> kcal
-🥩 *Proteins:* <g> g
-🥔 *Carbs:* <g> g
-🧈 *Fats:* <g> g
-
-🔔 *Assumptions:* We've updated this to <explain what changed>. Let me know if anything else needs adjusting! 😊
-
-⏳ *Daily Progress:*
-\${bars}
-
-<motivational sentence about the update + ask how their day is going + relevant emoji>
-
-!! NEVER use graphical bars manually. Only include the literal string "\${bars}".`
-        }];
-
-        if (text) {
-          contextualMsgs.push({ role: 'user', content: text });
-        }
-        
-        console.log('💰 MAKING OPENAI API CALL for meal update');
-        const updateResponse = await openai.chat.completions.create({
-          model: 'gpt-5-chat-latest',
-          messages: contextualMsgs,
-          max_tokens: 700,
-          temperature: 0.1
-        });
-
-        reply = updateResponse.choices[0].message.content;
-        console.log('🎭 Update response generated');
-        
-        // Extract NEW macros from the AI response
-        const flat = reply.replace(/\n/g, ' ');
-        const macroRegex = /Calories[^\d]*(\d+)[^]*?Proteins[^\d]*(\d+)[^]*?Carbs[^\d]*(\d+)[^]*?Fats[^\d]*(\d+)/i;
-        const match = flat.match(macroRegex);
-        
-        if (match) {
-          const [_, newKcal, newProt, newCarb, newFat] = match.map(Number);
-          
-          console.log('🔄 UPDATING DATABASE:', {
-            oldValues: { kcal: lastMeal.kcal, prot: lastMeal.prot, carb: lastMeal.carb, fat: lastMeal.fat },
-            newValues: { kcal: newKcal, prot: newProt, carb: newCarb, fat: newFat }
-          });
-          
-          // Update meal_logs record
-          const { error: updateError } = await db
-            .from('meal_logs')
-            .update({
-              kcal: newKcal,
-              prot: newProt,
-              carb: newCarb,
-              fat: newFat,
-            })
-            .eq('id', lastMeal.id);
-          
-          if (updateError) {
-            console.error('❌ Failed to update meal_logs:', updateError);
-          } else {
-            console.log('✅ meal_logs updated successfully');
-            
-            // Calculate difference for daily totals
-            const kcalDiff = newKcal - lastMeal.kcal;
-            const protDiff = newProt - lastMeal.prot;
-            const carbDiff = newCarb - lastMeal.carb;
-            const fatDiff = newFat - lastMeal.fat;
-            
-            console.log('📊 Daily totals adjustment:', { kcalDiff, protDiff, carbDiff, fatDiff });
-            
-            // Update daily totals with the difference
-            if (kcalDiff !== 0 || protDiff !== 0 || carbDiff !== 0 || fatDiff !== 0) {
-              const { error: totalsError } = await db.rpc('increment_daily_totals', {
-                p_phone: phone,
-                p_date: today,
-                p_kcal: kcalDiff,
-                p_prot: protDiff,
-                p_carb: carbDiff,
-                p_fat: fatDiff
-              });
-              
-              if (totalsError) {
-                console.error('❌ Failed to update daily totals:', totalsError);
-              } else {
-                console.log('✅ Daily totals updated with difference');
-                
-                // Update local used values for progress bars
-                used.kcal += kcalDiff;
-                used.prot += protDiff;
-                used.carb += carbDiff;
-                used.fat += fatDiff;
-              }
-            }
-            
-            // Clean up any temporary meal keys
-            await cleanupTempMealKeys(phone);
-            console.log('🧹 Temporary meal keys cleaned after update');
-          }
-        } else {
-          console.log('⚠️ Could not extract macros from update response');
-        }
-      }
-      // Replace progress bars with actual data
-      reply = reply.replace(/\$\{(progress_bars|bars)\}/g, bars(used, goals));
-      
-      // Skip normal AI processing since we handled it above
-    }
-
-    // Handle meal deletions with database modification and temporary injection
-    else if (intentClassification.intent === 'delete_meal') {
-      console.log('🗑️ MEAL DELETE REQUEST - Using temporary meal injection');
-      
-      // STEP 1: Fetch the most recent meal from Supabase
-      const recentMeals = await getUserMealHistory(phone, 1);
-      
-      if (!recentMeals || recentMeals.length === 0) {
-        reply = "I don't see any recent meals to delete. Please log a meal first! 🍽️";
-      } else {
-        const lastMeal = recentMeals[0];
-        console.log('🎯 Deleting meal:', lastMeal.meal_description, 'ID:', lastMeal.id);
-        
-        // STEP 2: Temporarily store in Redis (5-min TTL as safety)
-        let tempKey = null;
-        if (redisClient) {
-          tempKey = `temp:meals:${phone}:${Date.now()}`;
-          await redisClient.setEx(tempKey, 300, JSON.stringify([lastMeal]));
-          console.log('📦 TEMP: Stored meal data in Redis:', tempKey);
-        }
-        console.log('📊 Meal macros to subtract:', { 
-          kcal: lastMeal.kcal, 
-          prot: lastMeal.prot, 
-          carb: lastMeal.carb, 
-          fat: lastMeal.fat 
-        });
-        
-        // Delete from meal_logs table
-        const { error: deleteError } = await db
-          .from('meal_logs')
-          .delete()
-          .eq('id', lastMeal.id);
-        
-        if (deleteError) {
-          console.error('❌ Failed to delete meal_logs:', deleteError);
-          reply = "I had trouble deleting that meal. Please try again in a moment.";
-        } else {
-          console.log('✅ Meal deleted successfully from meal_logs');
-          
-          // Subtract the meal's macros from daily totals
-          const { error: totalsError } = await db.rpc('increment_daily_totals', {
-            p_phone: phone,
-            p_date: today,
-            p_kcal: -lastMeal.kcal,  // Negative to subtract
-            p_prot: -lastMeal.prot,
-            p_carb: -lastMeal.carb,
-            p_fat: -lastMeal.fat
-          });
-          
-          if (totalsError) {
-            console.error('❌ Failed to update daily totals after deletion:', totalsError);
-          } else {
-            console.log('✅ Daily totals updated after meal deletion');
-            
-            // Update local used values for progress bars
-            used.kcal -= lastMeal.kcal;
-            used.prot -= lastMeal.prot;
-            used.carb -= lastMeal.carb;
-            used.fat -= lastMeal.fat;
-          }
-          
-          // Clean up any temporary meal keys
-          await cleanupTempMealKeys(phone);
-          console.log('🔄 Meal history cache invalidated after deletion');
-          
-          // Generate confirmation message using standardized format
-          const contextualMsgs = [{
-            role: 'system',
-            content: buildContextAwareSystemPrompt(intentClassification.intent, userProfile, userSession, userFirstName) + 
-            `\n\nDELETED MEAL: ${lastMeal.meal_description} (${lastMeal.kcal} kcal, ${lastMeal.prot}g protein, ${lastMeal.carb}g carbs, ${lastMeal.fat}g fat)\n\nGenerate a confirmation using this EXACT format:
-
-✅ *Meal "${lastMeal.meal_description}" removed from today's log${userFirstName ? `, ${userFirstName}` : ''}.*
-
-⏳ *Daily Progress:*
-
-\${bars}
-
-<brief supportive message asking if they need anything else>
-
-!! NEVER use graphical bars manually. Only include the literal string "\${bars}".`
-          }];
-
-          if (text) {
-            contextualMsgs.push({ role: 'user', content: text });
-          }
-          
-          console.log('💰 MAKING OPENAI API CALL for delete confirmation');
-          const deleteResponse = await openai.chat.completions.create({
-            model: 'gpt-5-chat-latest',
-            messages: contextualMsgs,
-            max_tokens: 400,
-            temperature: 0.1
-          });
-
-          reply = deleteResponse.choices[0].message.content;
-          console.log('🎭 Delete confirmation response generated');
-          
-          // STEP 4: IMMEDIATELY delete temp data after LLM response
-          if (tempKey && redisClient) {
-            const deleted = await redisClient.del(tempKey);
-            console.log('🗑️ TEMP: Immediately deleted meal data from Redis:', tempKey, '- Deleted:', deleted);
-          }
-          
-          console.log('✅ Temporary injection complete - Redis is clean');
-        }
-      }
-
-      // Replace progress bars with actual data
-      reply = reply.replace(/\$\{(progress_bars|bars)\}/g, bars(used, goals));
-      
-      // Skip normal AI processing since we handled it above
-    }
-
-    // Handle get_meal_history intent - Show today's meals in standardized format
-    else if (intentClassification.intent === 'get_meal_history') {
-      console.log('🍽️ MEAL HISTORY REQUEST - Fetching today meals');
-      
-      // Get today's meal history from Supabase
-      const todaysMeals = await getUserMealHistory(phone, 20);
-      
-      if (!todaysMeals || todaysMeals.length === 0) {
-        reply = `You haven't logged any meals yet today, ${userFirstName || ''}! 📝
-
-Ready to start tracking? Just send me a photo of your meal or describe what you ate! 📸🍽️`;
-      } else {
-        // Build standardized meal history format
-        let mealHistoryText = `Here's your meal history for today:\n\n`;
-        
-        todaysMeals.forEach((meal, index) => {
-          mealHistoryText += `🍽️ Meal ${index + 1}: ${meal.meal_description}\n`;
-          mealHistoryText += `🔥 Calories: ${meal.kcal} kcal\n`;
-          mealHistoryText += `🥩 Proteins: ${meal.prot} g\n`;
-          mealHistoryText += `🥔 Carbs: ${meal.carb} g\n`;
-          mealHistoryText += `🧈 Fats: ${meal.fat} g\n\n`;
-        });
-        
-        // Add friendly closing
-        mealHistoryText += `That's everything you've logged today! 📝`;
-        
-        reply = mealHistoryText;
-        console.log('✅ Standardized meal history generated with', todaysMeals.length, 'meals');
-      }
-      
-      // Skip normal AI processing
-    }
-
-
-    // Handle show_progress with TEMPORARY meal data injection
-    else if (intentClassification.intent === 'show_progress') {
-      console.log('📊 SHOW PROGRESS - Using temporary meal data injection');
-      
-      // STEP 1: Fetch meal data from Supabase (source of truth)
-      const mealHistory = await getUserMealHistory(phone, 10);
-      console.log('✅ Fetched', mealHistory.length, 'meals from Supabase');
-      
-      // STEP 2: Temporarily store in Redis for LLM context (with 5-min TTL as safety)
-      let tempKey = null;
-      if (redisClient && mealHistory.length > 0) {
-        tempKey = `temp:meals:${phone}:${Date.now()}`;
-        await redisClient.setEx(tempKey, 300, JSON.stringify(mealHistory));
-        console.log('📦 TEMP: Stored meal data in Redis:', tempKey);
-      }
-      
-      // STEP 3: Build context for LLM
-      const mealHistoryContext = mealHistory.length > 0 
-        ? `Recent meals (ordered newest first): ${mealHistory.map((meal, index) => 
-            `${index + 1}. ${meal.meal_description} (${meal.kcal} kcal, ${meal.prot}g protein, ${meal.carb}g carbs, ${meal.fat}g fat) - ${new Date(meal.created_at).toLocaleString()}`
-          ).join(' | ')}`
-        : 'No recent meals found';
-      
-      const contextualMsgs = [{
-        role: 'system',
-        content: buildContextAwareSystemPrompt(intentClassification.intent, userProfile, userSession, userFirstName) + 
-        `\n\nUSER'S COMPLETE MEAL HISTORY: ${mealHistoryContext}\n\nIMPORTANT: When user asks about "latest meal" or "last meal", always use the FIRST meal in this list as it's the most recent. The meals are ordered from newest to oldest. Always reference the actual meal data from this history, not from daily totals.`
-      }];
-
-      if (text) {
-        contextualMsgs.push({ role: 'user', content: text });
-      }
-      
-      console.log('💰 MAKING OPENAI API CALL with temporary meal context');
-      const contextualGpt = await openai.chat.completions.create({
-        model: 'gpt-5-chat-latest',
-        messages: contextualMsgs,
-        max_tokens: 700,
-        temperature: 0.1
-      });
-
-      reply = contextualGpt.choices[0].message.content;
-      console.log('🎭 LLM response generated with meal context');
-      
-      // STEP 4: IMMEDIATELY delete temp data after LLM response
-      if (tempKey && redisClient) {
-        const deleted = await redisClient.del(tempKey);
-        console.log('🗑️ TEMP: Immediately deleted meal data from Redis:', tempKey, '- Deleted:', deleted);
-      }
-      
-      console.log('✅ Temporary injection complete - Redis is clean');
-    }
-    // Handle standardized daily progress requests with temporary meal injection
-    else if (intentClassification.intent === 'get_daily_progress') {
-      console.log('📊 DAILY PROGRESS REQUEST - Using temporary meal injection');
-      
-      // STEP 1: Fetch meal data from Supabase
-      const mealHistory = await getUserMealHistory(phone, 10);
-      console.log('✅ Fetched', mealHistory.length, 'meals from Supabase for context');
-      
-      // STEP 2: Temporarily store in Redis (5-min TTL as safety)
-      let tempKey = null;
-      if (redisClient && mealHistory.length > 0) {
-        tempKey = `temp:meals:${phone}:${Date.now()}`;
-        await redisClient.setEx(tempKey, 300, JSON.stringify(mealHistory));
-        console.log('📦 TEMP: Stored meal data in Redis:', tempKey);
-      }
-      
-      // STEP 3: Get progress data
-      const progressData = await getStandardizedDailyProgress(phone);
-      
-      if (!progressData) {
-        reply = "I couldn't fetch your daily progress right now. Please try again in a moment.";
-      } else {
-        reply = progressData.progressDisplay;
-        console.log('✅ Standardized daily progress generated');
-      }
-      
-      // STEP 4: IMMEDIATELY delete temp data
-      if (tempKey && redisClient) {
-        const deleted = await redisClient.del(tempKey);
-        console.log('🗑️ TEMP: Immediately deleted meal data from Redis:', tempKey, '- Deleted:', deleted);
-      }
-      
-      console.log('✅ Temporary injection complete - Redis is clean');
-      
-      // Skip normal AI processing
-    }
-    // Process all other intents with context-aware AI
-    else {
-      console.log('🎭 Processing intent with context-aware AI:', intentClassification.intent);
-    }
-    
-    // Extract macros from the LangChain response and store in database
-    const flat = reply.replace(/\n/g, ' ');
-    const macroRegex = /Calories[^\d]*(\d+)[^]*?Proteins[^\d]*(\d+)[^]*?Carbs[^\d]*(\d+)[^]*?Fats[^\d]*(\d+)/i;
-    const match = flat.match(macroRegex);
-    
-    if (match && intentClassification.intent === 'add_meal') {
-      const [_, kcal, prot, carb, fat] = match.map(Number);
-      
-      // Extract meal description from GPT response
-      let mealDescription = 'meal';
-      const mealLabelMatch = reply.match(/🍽️\s*\*([^:]+):\*\s*([^*\n]+)/i);
-      if (mealLabelMatch) {
-        mealDescription = mealLabelMatch[2].trim();
-      } else {
-        mealDescription = text.substring(0, 50);
-      }
-      
-      console.log('🏷️ Extracted meal description:', mealDescription);
-      console.log('📊 Extracted macros:', { kcal, prot, carb, fat });
-      
-      // Store in database
-      await db.from('meal_logs').insert({ 
-        user_phone: phone, 
-        kcal, 
-        prot, 
-        carb, 
-        fat, 
-        meal_description: mealDescription,
-        created_at: new Date() 
-      });
-
-      // Clean up any temporary meal keys
-      await cleanupTempMealKeys(phone);
-      
-      // Update daily totals
-      const { error: totalsError } = await db.rpc('increment_daily_totals', {
-        p_phone: phone,
-        p_date: today,
-        p_kcal: kcal,
-        p_prot: prot,
-        p_carb: carb,
-        p_fat: fat
-      });
-      
-      if (totalsError) {
-        console.error('❌ Totals update error:', totalsError);
-      }
-      
-      // Update local used values for progress bars
-      used.kcal += kcal; 
-      used.prot += prot; 
-      used.carb += carb; 
-      used.fat += fat;
-      
-      console.log('✅ Meal logged and totals updated');
-    }
-
-    // Always process the reply and replace progress bars
-    reply = reply.replace(/\$\{(progress_bars|bars)\}/g, bars(used, goals));
-    
-    console.log('📝 Reply variable check:', reply ? 'HAS CONTENT' : 'EMPTY');
-    console.log('📝 Reply preview:', reply?.substring(0, 100));
+    // All conversation and meal handling is now handled by the unified ReAct agent above
+    // The LLM decides what functions to call, and the tool execution layer handles all operations
 
     // ============================================================================
     // INTELLIGENT MESSAGE CHUNKING FOR LONG RESPONSES
