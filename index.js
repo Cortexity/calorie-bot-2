@@ -810,13 +810,13 @@ function enhanceParametersWithContext(intent, extractedParams, userProfile) {
 }
 
 // Generate dashboard redirect messages for profile changes
-function generateDashboardRedirectMessage(fieldToChange, userName) {
+function generateDashboardRedirectMessage(fieldToChange, userName, dashboardUrl = null) {
   const fieldMessages = {
     diet_preference: "diet preferences",
-    weight: "current weight", 
+    weight: "current weight",
     goals: "fitness goals",
     calories: "calorie targets",
-    macros: "macro targets", 
+    macros: "macro targets",
     activity_level: "activity level",
     height: "height",
     age: "age"
@@ -825,6 +825,21 @@ function generateDashboardRedirectMessage(fieldToChange, userName) {
   const greeting = userName ? `Hi ${userName}! ` : '';
   const fieldName = fieldMessages[fieldToChange] || 'profile settings';
 
+  // If dashboard URL is provided, include direct link
+  if (dashboardUrl) {
+    return `${greeting}I see you want to update your ${fieldName}! 📝
+
+You can update your profile anytime through your personal dashboard—it helps keep your info secure and accurate.
+
+🔗 Access your dashboard here:
+${dashboardUrl}
+
+Once you update there, I'll automatically have your new information within seconds!
+
+This ensures your data stays consistent across all systems (WhatsApp, dashboard, and billing). 🔒`;
+  }
+
+  // Fallback for cases without URL
   return `${greeting}I see you want to update your ${fieldName}! 📝
 
 You can update your profile anytime through your personal dashboard—it helps keep your info secure and accurate.
@@ -1689,18 +1704,8 @@ Available commands:
 
         const { dashboard_url, user_name } = dashboardResponse.data;
 
-        reply = `Hi ${user_name || 'there'}! 👋
-
-🔗 Access your personal dashboard here:
-${dashboard_url}
-
-From your dashboard you can:
-- Update your profile information
-- Adjust your calorie and macro goals
-- Manage your subscription
-- View your account details
-
-This link is personalized for your account. Keep it secure!`;
+        // Use generateDashboardRedirectMessage with the URL (generic field for profile updates)
+        reply = generateDashboardRedirectMessage('profile', user_name, dashboard_url);
 
         console.log('✅ Dashboard link generated and incorporated');
       } catch (error) {

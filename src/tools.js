@@ -26,6 +26,59 @@ const formatProgressBars = (used, goals) => {
 🧈${getTrafficLight(fatPct)} *Fats:* ${used.fat}/${goals.fat} g`;
 };
 
+// ============================================================================
+// HELPER: Generate Standardized Daily Progress Display
+// ============================================================================
+
+const generateStandardizedProgressDisplay = (used, goals) => {
+  // Traffic light function
+  function getTrafficLight(percentage) {
+    if (percentage >= 95) return '🔴';
+    if (percentage > 70) return '🟠';
+    return '🟢';
+  }
+
+  const kcalPct = Math.round((used.kcal / goals.kcal) * 100);
+  const protPct = Math.round((used.prot / goals.prot) * 100);
+  const carbPct = Math.round((used.carb / goals.carb) * 100);
+  const fatPct = Math.round((used.fat / goals.fat) * 100);
+
+  return `⏳ *Daily Progress:*
+
+🔥${getTrafficLight(kcalPct)} *Calories:* ${used.kcal}/${goals.kcal} kcal
+🥩${getTrafficLight(protPct)} *Proteins:* ${used.prot}/${goals.prot} g
+🥔${getTrafficLight(carbPct)} *Carbs:* ${used.carb}/${goals.carb} g
+🧈${getTrafficLight(fatPct)} *Fats:* ${used.fat}/${goals.fat} g
+
+There's your progress update! How are you feeling about hitting your targets today?`;
+};
+
+// ============================================================================
+// HELPER: Generate Meal History Display
+// ============================================================================
+
+const generateMealHistoryDisplay = (meals, userName = null) => {
+  if (!meals || meals.length === 0) {
+    return `You haven't logged any meals yet today${userName ? `, ${userName}` : ''}! 📝
+
+Ready to start tracking? Just send me a photo of your meal or describe what you ate! 📸🍽️`;
+  }
+
+  let mealHistoryText = `Here's your meal history for today:\n\n`;
+
+  meals.forEach((meal, index) => {
+    mealHistoryText += `🍽️ *Meal ${index + 1}:* ${meal.description}\n`;
+    mealHistoryText += `🔥 *Calories:* ${meal.calories} kcal\n`;
+    mealHistoryText += `🥩 *Proteins:* ${meal.protein} g\n`;
+    mealHistoryText += `🥔 *Carbs:* ${meal.carbs} g\n`;
+    mealHistoryText += `🧈 *Fats:* ${meal.fats} g\n\n`;
+  });
+
+  mealHistoryText += `That's everything you've logged today! 📝`;
+
+  return mealHistoryText;
+};
+
 const executeTool = async (functionName, args, context) => {
   const { phone, userProfile, db, today, redisClient } = context;
 
@@ -47,6 +100,9 @@ const executeTool = async (functionName, args, context) => {
 
       case 'get_meal_history':
         return await getMealHistoryTool({ phone, db, today });
+
+      case 'get_user_profile':
+        return await getUserProfileTool({ userProfile });
 
       case 'get_dashboard_link':
         return await getDashboardLinkTool({ phone });
@@ -529,43 +585,54 @@ const showProgressTool = async (context) => {
       throw new Error('User data not found');
     }
 
-    // Calculate percentages and traffic light indicators
-    const getIndicator = (used, goal) => {
-      if (goal === 0) return '⚪';
-      const percent = (used / goal) * 100;
-      if (percent <= 95) return '🟢'; // Under goal
-      if (percent <= 110) return '🟡'; // Near goal
-      return '🔴'; // Over goal
+    // Prepare used and goals objects
+    const used = {
+      kcal: Math.round(row.kcal_used),
+      prot: Math.round(row.prot_used),
+      carb: Math.round(row.carb_used),
+      fat: Math.round(row.fat_used)
     };
+
+    const goals = {
+      kcal: row.kcal_goal,
+      prot: row.prot_goal,
+      carb: row.carb_goal,
+      fat: row.fat_goal
+    };
+
+    // Generate standardized progress display
+    const formattedDisplay = generateStandardizedProgressDisplay(used, goals);
 
     const progressData = {
       success: true,
       daily_progress: {
         calories: {
-          indicator: getIndicator(row.kcal_used, row.kcal_goal),
-          used: Math.round(row.kcal_used),
-          goal: row.kcal_goal,
-          remaining: Math.max(0, row.kcal_goal - row.kcal_used)
+          used: used.kcal,
+          goal: goals.kcal,
+          remaining: Math.max(0, goals.kcal - used.kcal)
         },
         protein: {
-          indicator: getIndicator(row.prot_used, row.prot_goal),
-          used: Math.round(row.prot_used),
-          goal: row.prot_goal,
-          remaining: Math.max(0, row.prot_goal - row.prot_used)
+          used: used.prot,
+          goal: goals.prot,
+          remaining: Math.max(0, goals.prot - used.prot)
         },
         carbs: {
-          indicator: getIndicator(row.carb_used, row.carb_goal),
-          used: Math.round(row.carb_used),
-          goal: row.carb_goal,
-          remaining: Math.max(0, row.carb_goal - row.carb_used)
+          used: used.carb,
+          goal: goals.carb,
+          remaining: Math.max(0, goals.carb - used.carb)
         },
         fats: {
-          indicator: getIndicator(row.fat_used, row.fat_goal),
-          used: Math.round(row.fat_used),
-          goal: row.fat_goal,
-          remaining: Math.max(0, row.fat_goal - row.fat_used)
+          used: used.fat,
+          goal: goals.fat,
+          remaining: Math.max(0, goals.fat - used.fat)
         }
-      }
+      },
+      formatted_display: formattedDisplay,
+      response_instructions: `Present the user's daily progress using this formatted display:
+
+${formattedDisplay}
+
+You can optionally add a conversational follow-up or encouragement, but always include the formatted display above.`
     };
 
     console.log('✅ Progress fetched successfully');
@@ -581,7 +648,7 @@ const showProgressTool = async (context) => {
 // ============================================================================
 
 const getMealHistoryTool = async (context) => {
-  const { phone, db, today } = context;
+  const { phone, db, today, userProfile } = context;
 
   try {
     console.log('📋 Fetching meal history');
@@ -598,36 +665,101 @@ const getMealHistoryTool = async (context) => {
       throw new Error(`Failed to fetch meal history: ${error.message}`);
     }
 
-    if (!meals || meals.length === 0) {
-      return {
-        success: true,
-        meals: [],
-        message: 'No meals logged today yet.'
-      };
-    }
+    const formattedMeals = meals && meals.length > 0
+      ? meals.map((meal) => ({
+          description: meal.meal_description,
+          calories: meal.kcal,
+          protein: meal.prot,
+          carbs: meal.carb,
+          fats: meal.fat,
+          time: new Date(meal.created_at).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+        }))
+      : [];
 
-    const formattedMeals = meals.map((meal, index) => ({
-      number: index + 1,
-      description: meal.meal_description,
-      calories: meal.kcal,
-      protein: meal.prot,
-      carbs: meal.carb,
-      fats: meal.fat,
-      time: new Date(meal.created_at).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    }));
+    // Generate formatted display
+    const formattedDisplay = generateMealHistoryDisplay(
+      formattedMeals,
+      userProfile?.first_name
+    );
 
     console.log('✅ Meal history fetched successfully');
 
     return {
       success: true,
       meals: formattedMeals,
-      total_meals: meals.length
+      total_meals: formattedMeals.length,
+      formatted_display: formattedDisplay,
+      response_instructions: `Present the user's meal history using this formatted display:
+
+${formattedDisplay}
+
+This shows all meals they've logged today with complete nutritional information.`
     };
   } catch (error) {
     console.error('❌ Get meal history error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ============================================================================
+// GET USER PROFILE TOOL
+// ============================================================================
+
+const getUserProfileTool = async (context) => {
+  const { userProfile } = context;
+
+  try {
+    console.log('👤 Fetching user profile');
+
+    if (!userProfile) {
+      return {
+        success: false,
+        error: 'Profile information not available'
+      };
+    }
+
+    const profileDisplay = `👤 *Name:* ${userProfile.first_name || 'Not set'} ${userProfile.last_name || ''}
+🍽️ *Diet:* ${userProfile.diet_preference || 'No preference'}
+🎯 *Goal:* ${userProfile.fitness_goal || 'Not set'}
+⚖️ *Weight:* ${userProfile.weight_kg || 'Not set'} kg
+📏 *Height:* ${userProfile.height_cm || 'Not set'} cm
+🏃 *Activity:* ${userProfile.activity_level || 'Not set'}
+
+🔥 *Daily Targets:*
+- Calories: ${userProfile.kcal_goal || 'Not set'}
+- Protein: ${userProfile.prot_goal || 'Not set'}g
+- Carbs: ${userProfile.carb_goal || 'Not set'}g
+- Fat: ${userProfile.fat_goal || 'Not set'}g`;
+
+    console.log('✅ User profile fetched successfully');
+
+    return {
+      success: true,
+      profile_data: {
+        first_name: userProfile.first_name,
+        last_name: userProfile.last_name,
+        diet_preference: userProfile.diet_preference,
+        fitness_goal: userProfile.fitness_goal,
+        weight_kg: userProfile.weight_kg,
+        height_cm: userProfile.height_cm,
+        activity_level: userProfile.activity_level,
+        kcal_goal: userProfile.kcal_goal,
+        prot_goal: userProfile.prot_goal,
+        carb_goal: userProfile.carb_goal,
+        fat_goal: userProfile.fat_goal
+      },
+      formatted_display: profileDisplay,
+      response_instructions: `Present the user's profile using this formatted display:
+
+${profileDisplay}
+
+Add a friendly closing line offering to help them update any information through their dashboard if needed.`
+    };
+  } catch (error) {
+    console.error('❌ Get user profile error:', error);
     return { success: false, error: error.message };
   }
 };
@@ -647,7 +779,10 @@ const getDashboardLinkTool = async (context) => {
     return {
       success: true,
       action: 'generate_dashboard_link',
-      phone: phone
+      phone: phone,
+      response_instructions: `The webhook is generating a personalized dashboard link for the user. You will receive a formatted message with the dashboard URL included. Present this message to the user - it contains the direct link to their personal dashboard where they can update their profile information, adjust their goals, and manage their account settings.
+
+The message will be pre-formatted and ready to send, so simply present it as provided.`
     };
   } catch (error) {
     console.error('❌ Get dashboard link error:', error);

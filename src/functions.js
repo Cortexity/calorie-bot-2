@@ -126,6 +126,18 @@ const getFunctionDefinitions = () => [
   {
     type: 'function',
     function: {
+      name: 'get_user_profile',
+      description: 'Show the user their current profile information including name, fitness goal, diet preference, weight, height, activity level, and daily nutrition targets.',
+      parameters: {
+        type: 'object',
+        properties: {}
+      }
+    }
+  },
+
+  {
+    type: 'function',
+    function: {
       name: 'get_dashboard_link',
       description: 'Generate a personalized dashboard link for the user to manage their profile, goals, and subscription settings.',
       parameters: {
