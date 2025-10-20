@@ -3,6 +3,29 @@
  * Handles all function calls from the LLM
  */
 
+// ============================================================================
+// HELPER: Format Progress Bars with Traffic Light Indicators
+// ============================================================================
+
+const formatProgressBars = (used, goals) => {
+  const kcalPct = Math.round((used.kcal / goals.kcal) * 100);
+  const protPct = Math.round((used.prot / goals.prot) * 100);
+  const carbPct = Math.round((used.carb / goals.carb) * 100);
+  const fatPct = Math.round((used.fat / goals.fat) * 100);
+
+  // Traffic light function: 🟢 under goal, 🟠 near goal, 🔴 over goal
+  function getTrafficLight(percentage) {
+    if (percentage >= 95) return '🔴';
+    if (percentage > 70) return '🟠';
+    return '🟢';
+  }
+
+  return `🔥${getTrafficLight(kcalPct)} *Calories:* ${used.kcal}/${goals.kcal} kcal
+🥩${getTrafficLight(protPct)} *Proteins:* ${used.prot}/${goals.prot} g
+🥔${getTrafficLight(carbPct)} *Carbs:* ${used.carb}/${goals.carb} g
+🧈${getTrafficLight(fatPct)} *Fats:* ${used.fat}/${goals.fat} g`;
+};
+
 const executeTool = async (functionName, args, context) => {
   const { phone, userProfile, db, today, redisClient } = context;
 
@@ -101,6 +124,12 @@ const addMealTool = async (args, context) => {
 
     console.log('✅ Meal added successfully');
 
+    // Format progress bars for response
+    const formattedBars = formatProgressBars(
+      { kcal: row.kcal_used, prot: row.prot_used, carb: row.carb_used, fat: row.fat_used },
+      { kcal: row.kcal_goal, prot: row.prot_goal, carb: row.carb_goal, fat: row.fat_goal }
+    );
+
     return {
       success: true,
       meal: {
@@ -120,7 +149,25 @@ const addMealTool = async (args, context) => {
         carbs_goal: row.carb_goal,
         fats_used: Math.round(row.fat_used),
         fats_goal: row.fat_goal
-      }
+      },
+      formatted_progress: formattedBars,
+      response_instructions: `Format your response using this exact structure:
+
+✅ *Meal logged successfully!*
+
+🍽️ *<MealType>:* <brief label>
+
+🔥 *Calories:* <kcal> kcal
+🥩 *Proteins:* <g> g
+🥔 *Carbs:* <g> g
+🧈 *Fats:* <g> g
+
+📝 *Assumptions:* give precise size and portion measurements with units in g/oz/mL, comma-separated, end with "Let me know if you'd like any adjustments 🙂"
+
+⏳ *Daily Progress:*
+${formattedBars}
+
+<one motivational sentence + ask them how they are feeling about their progress + relevant emoji>`
     };
   } catch (error) {
     console.error('❌ Add meal error:', error);
@@ -241,6 +288,12 @@ const updateMealTool = async (args, context) => {
 
     console.log('✅ Meal updated successfully');
 
+    // Format progress bars for response
+    const formattedBars = formatProgressBars(
+      { kcal: row.kcal_used, prot: row.prot_used, carb: row.carb_used, fat: row.fat_used },
+      { kcal: row.kcal_goal, prot: row.prot_goal, carb: row.carb_goal, fat: row.fat_goal }
+    );
+
     return {
       success: true,
       message: 'Meal updated successfully!',
@@ -267,7 +320,25 @@ const updateMealTool = async (args, context) => {
         carbs_goal: row.carb_goal,
         fats_used: Math.round(row.fat_used),
         fats_goal: row.fat_goal
-      }
+      },
+      formatted_progress: formattedBars,
+      response_instructions: `Format your response using this exact structure:
+
+✅ *Meal updated successfully!*
+
+🍽️ *<MealType>:* <updated meal description>
+
+🔥 *Calories:* <kcal> kcal
+🥩 *Proteins:* <g> g
+🥔 *Carbs:* <g> g
+🧈 *Fats:* <g> g
+
+📝 *Assumptions:* We've updated this to <explain what changed>. Let me know if anything else needs adjusting! 🙂
+
+⏳ *Daily Progress:*
+${formattedBars}
+
+<motivational sentence about the update + ask how their day is going + relevant emoji>`
     };
   } catch (error) {
     console.error('❌ Update meal error:', error);
@@ -382,6 +453,12 @@ const deleteMealTool = async (args, context) => {
 
     console.log('✅ Meal deleted successfully');
 
+    // Format progress bars for response
+    const formattedBars = formatProgressBars(
+      { kcal: row.kcal_used, prot: row.prot_used, carb: row.carb_used, fat: row.fat_used },
+      { kcal: row.kcal_goal, prot: row.prot_goal, carb: row.carb_goal, fat: row.fat_goal }
+    );
+
     return {
       success: true,
       message: 'Meal deleted successfully!',
@@ -401,7 +478,16 @@ const deleteMealTool = async (args, context) => {
         carbs_goal: row.carb_goal,
         fats_used: Math.round(row.fat_used),
         fats_goal: row.fat_goal
-      }
+      },
+      formatted_progress: formattedBars,
+      response_instructions: `Format your response using this exact structure:
+
+✅ *Meal "${mealToDelete.meal_description}" removed from today's log.*
+
+⏳ *Daily Progress:*
+${formattedBars}
+
+<brief supportive message asking if they need anything else + relevant emoji>`
     };
   } catch (error) {
     console.error('❌ Delete meal error:', error);
