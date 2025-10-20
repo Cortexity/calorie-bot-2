@@ -302,8 +302,7 @@ const updateMealTool = async (args, context) => {
         kcal: new_calories || mealToUpdate.kcal,
         prot: new_protein || mealToUpdate.prot,
         carb: new_carbs || mealToUpdate.carb,
-        fat: new_fats || mealToUpdate.fat,
-        updated_at: new Date().toISOString()
+        fat: new_fats || mealToUpdate.fat
       })
       .eq('id', mealToUpdate.id);
 
