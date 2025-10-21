@@ -1773,12 +1773,33 @@ Available commands:
       await updateUserSession(phone, userSession);
       console.log('💾 Final session save completed');
     }
-    
-    res.type('text/xml').send(twiml.toString());;
+
+    // Send response back to Twilio/WhatsApp
+    try {
+      const twimlString = twiml.toString();
+      console.log('📤 TwiML generated, sending to Twilio...');
+      console.log(`📋 TwiML length: ${twimlString.length} characters`);
+      console.log('📋 TwiML content:');
+      console.log(twimlString);
+      res.type('text/xml').send(twimlString);
+      console.log('✅ Response sent to Twilio successfully');
+    } catch (sendError) {
+      console.error('❌ Error generating/sending TwiML:', sendError);
+      const errorTwiml = new Twilio.twiml.MessagingResponse();
+      errorTwiml.message('⚠️ Technical error occurred. Please try again.');
+      res.type('text/xml').send(errorTwiml.toString());
+    }
   } catch (err) {
     console.error('⚠️ Error in webhook:', err);
-    twiml.message('⚠️ Something went wrong. Please try again.');
-    res.type('text/xml').send(twiml.toString());
+    console.error('📍 Error stack:', err.stack);
+    try {
+      const errorTwiml = new Twilio.twiml.MessagingResponse();
+      errorTwiml.message('⚠️ Something went wrong. Please try again.');
+      res.type('text/xml').send(errorTwiml.toString());
+    } catch (fallbackError) {
+      console.error('❌ Even error response failed:', fallbackError);
+      res.status(500).send('Error');
+    }
   }
 });
 

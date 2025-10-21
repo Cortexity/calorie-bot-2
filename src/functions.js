@@ -8,7 +8,7 @@ const getFunctionDefinitions = () => [
     type: 'function',
     function: {
       name: 'add_meal',
-      description: 'Log a new meal with nutritional breakdown. Call this when the user mentions eating food, describes a meal, or sends a food photo.',
+      description: 'ALWAYS CALL THIS TOOL TO LOG A NEW MEAL. Log a new meal with nutritional breakdown. Call this when the user mentions eating food, describes a meal, or sends a food photo.',
       parameters: {
         type: 'object',
         properties: {
@@ -47,7 +47,7 @@ const getFunctionDefinitions = () => [
     type: 'function',
     function: {
       name: 'update_meal',
-      description: 'Update a previously logged meal. Use when the user wants to correct, modify, or adjust a meal entry.',
+      description: 'ALWAYS CALL THIS TOOL TO UPDATE A MEAL. Update a previously logged meal. Use when the user wants to correct, modify, or adjust a meal entry.',
       parameters: {
         type: 'object',
         properties: {
