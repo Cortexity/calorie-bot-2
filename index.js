@@ -1349,12 +1349,31 @@ app.post('/webhook', async (req, res) => {
 
   if (userSession?.conversationHistory && userSession.conversationHistory.length > 0) {
     console.log('\n📦 REDIS CACHE - ALL MESSAGES:');
-    userSession.conversationHistory.forEach((exchange, index) => {
-      const userMsg = exchange.userMessage.substring(0, 50);
-      const botMsg = exchange.botResponse.substring(0, 50);
-      console.log(`  [${index + 1}/${userSession.conversationHistory.length}] User: "${userMsg}..." | Bot: "${botMsg}..."`);
+    const userMsgCount = userSession.conversationHistory.filter(m => m.role === 'user').length;
+    const toolMsgCount = userSession.conversationHistory.filter(m => m.role === 'tool').length;
+    const assistantMsgCount = userSession.conversationHistory.filter(m => m.role === 'assistant').length;
+
+    userSession.conversationHistory.forEach((message, index) => {
+      const roleEmoji = {
+        'user': '👤',
+        'assistant': '🤖',
+        'tool': '🔧'
+      }[message.role] || '📝';
+
+      let contentPreview = '';
+      if (typeof message.content === 'string') {
+        contentPreview = message.content.substring(0, 50);
+      } else if (Array.isArray(message.content)) {
+        contentPreview = '[image/complex content]';
+      } else if (message.content?.image_url) {
+        contentPreview = '[image]';
+      } else {
+        contentPreview = '[unknown content]';
+      }
+
+      console.log(`  [${index + 1}/${userSession.conversationHistory.length}] ${roleEmoji} ${message.role.toUpperCase()}: "${contentPreview}..."`);
     });
-    console.log(`✅ Total in cache: ${userSession.conversationHistory.length}/5 messages\n`);
+    console.log(`✅ Total in cache: ${userSession.conversationHistory.length} messages (👤 ${userMsgCount} user | 🤖 ${assistantMsgCount} assistant | 🔧 ${toolMsgCount} tool)\n`);
   } else {
     console.log('📦 REDIS CACHE: Empty (no conversation history)\n');
   }
@@ -1494,22 +1513,38 @@ Available commands:
     // BUILD CONTEXT-AWARE PROMPT WITH CONVERSATION HISTORY
     // ============================================================================
     
-    // Build conversation history context
+    // Build conversation history context (for logging/context)
+    // Note: The actual ReAct agent builds its own messages array from conversationHistory with the new format
     let conversationContext = '';
     if (userSession?.conversationHistory && userSession.conversationHistory.length > 0) {
       conversationContext = '\n\nRECENT CONVERSATION HISTORY (for context and continuity):';
-      
-      // Show last 3 exchanges for context
-      const recentExchanges = userSession.conversationHistory.slice(-3);
-      recentExchanges.forEach((exchange, index) => {
-        conversationContext += `\n\n[${index + 1} exchanges ago]`;
-        conversationContext += `\nUser: "${exchange.userMessage}"`;
-        conversationContext += `\nYour response: "${exchange.botResponse.substring(0, 150)}..."`;
+
+      // Show recent messages (user and assistant only, for readability)
+      const recentMessages = userSession.conversationHistory.slice(-6);
+      let userMsgCount = 0;
+
+      recentMessages.forEach((message, index) => {
+        if (message.role === 'user') {
+          userMsgCount++;
+          let preview = '';
+          if (typeof message.content === 'string') {
+            preview = message.content.substring(0, 100);
+          } else {
+            preview = '[image or complex content]';
+          }
+          conversationContext += `\n\n[Message ${index + 1}] User: "${preview}..."`;
+        } else if (message.role === 'assistant') {
+          let preview = message.content;
+          if (typeof preview === 'string') {
+            preview = preview.substring(0, 100);
+          }
+          conversationContext += `\nAssistant: "${preview}..."`;
+        }
       });
-      
+
       conversationContext += '\n\nCONVERSATION RULES:\n- When user says "yes/no/sure/okay" - assume they mean your MOST RECENT question\n- Don\'t ask for clarification unless truly ambiguous\n- Be natural and conversational, not robotic\n- Don\'t say "I\'ll circle back" or "let me clarify" - just continue naturally';
-      
-      console.log('🧠 Including conversation history:', userSession.conversationHistory.length, 'exchanges');
+
+      console.log('🧠 Including conversation history:', userSession.conversationHistory.length, 'total messages');
       console.log('📝 Conversation context preview:', conversationContext.substring(0, 300) + '...');
     } else {
       console.log('🔍 No conversation history available');
@@ -1559,20 +1594,25 @@ Available commands:
       }
     ];
 
-    // Add conversation history (last 10 messages)
+    // Add conversation history (last 10 USER messages + all intermediate messages)
     if (userSession?.conversationHistory && userSession.conversationHistory.length > 0) {
-      const recentExchanges = userSession.conversationHistory.slice(-10);
-      recentExchanges.forEach(exchange => {
-        messages.push({
-          role: 'user',
-          content: exchange.userMessage
-        });
-        messages.push({
-          role: 'assistant',
-          content: exchange.botResponse
-        });
-      });
+      // Find indices of the last 10 user messages
+      const userMessageIndices = userSession.conversationHistory
+        .map((msg, i) => msg.role === 'user' ? i : -1)
+        .filter(i => i !== -1)
+        .slice(-10); // Get last 10 user message indices
+
+      if (userMessageIndices.length > 0) {
+        // Start from the 10th most recent user message
+        const startIndex = userMessageIndices[0];
+        const recentMessages = userSession.conversationHistory.slice(startIndex);
+        messages.push(...recentMessages);
+        console.log(`📝 Added ${recentMessages.length} messages to context (including ${userMessageIndices.length} user messages and all intermediate tool/assistant messages)`);
+      }
     }
+
+    // Record where new messages will start (before adding current user message)
+    const messageStartIndex = messages.length;
 
     // Add current message (text or image)
     if (isImg && mUrl) {
@@ -1723,15 +1763,19 @@ Available commands:
     // ============================================================================
 
     if (userSession) {
-      // Add this exchange to conversation history
-      userSession.conversationHistory.push({
-        timestamp: new Date().toISOString(),
-        userMessage: text || (isImg ? '[image]' : '[audio]'),
-        botResponse: reply,
-        messageType: isImg ? 'image' : (isAudio ? 'audio' : 'text')
-      });
+      // Save all messages from this turn (user message + tool calls + results + final response)
+      // This preserves the full context including tool interactions
+      const newMessages = messages.slice(messageStartIndex);
 
-      console.log('📝 Conversation history updated with current exchange - Length:', userSession.conversationHistory.length);
+      if (newMessages.length > 0) {
+        userSession.conversationHistory.push(...newMessages);
+        console.log(`📝 Saved ${newMessages.length} messages to conversation history (including tool calls and results)`);
+        console.log('   - User messages:', newMessages.filter(m => m.role === 'user').length);
+        console.log('   - Assistant messages:', newMessages.filter(m => m.role === 'assistant').length);
+        console.log('   - Tool messages:', newMessages.filter(m => m.role === 'tool').length);
+      }
+
+      console.log('📝 Total conversation history length:', userSession.conversationHistory.length);
     }
     // All conversation and meal handling is now handled by the unified ReAct agent above
     // The LLM decides what functions to call, and the tool execution layer handles all operations
