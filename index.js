@@ -1720,6 +1720,8 @@ Available commands:
         // Loop continues - LLM will process results in next iteration
       } else {
         // No tool calls - LLM generated final response
+        // Add the final assistant message to the conversation history
+        messages.push(assistantMessage);
         reply = assistantMessage.content;
         continueLoop = false;
         console.log(`💬 LLM generated final response (loop complete after ${iterations} iteration(s))`);
@@ -1732,6 +1734,12 @@ Available commands:
       if (!reply) {
         reply = 'I got a bit overwhelmed with that request. Please try again!';
       }
+      // Add a final assistant message since we never got one from the loop
+      messages.push({
+        role: 'assistant',
+        content: reply
+      });
+      console.log('📝 Added fallback assistant message to conversation history');
     }
 
     // Handle dashboard link if it was requested during the loop
@@ -1746,6 +1754,14 @@ Available commands:
 
         // Use generateDashboardRedirectMessage with the URL (generic field for profile updates)
         reply = generateDashboardRedirectMessage('profile', user_name, dashboard_url);
+
+        // Update the last assistant message in the conversation to reflect what was actually sent
+        // This ensures conversation history matches what the user saw
+        const lastMessageIndex = messages.length - 1;
+        if (lastMessageIndex >= 0 && messages[lastMessageIndex].role === 'assistant') {
+          messages[lastMessageIndex].content = reply;
+          console.log('📝 Updated last assistant message with dashboard link');
+        }
 
         console.log('✅ Dashboard link generated and incorporated');
       } catch (error) {
