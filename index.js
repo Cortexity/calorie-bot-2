@@ -3212,3 +3212,35 @@ process.on('unhandledRejection', (err) => {
   console.error('💥 UNHANDLED REJECTION:', err);
   process.exit(1);
 });
+
+// ============================================================================
+// GRACEFUL SHUTDOWN HANDLERS
+// ============================================================================
+
+const gracefulShutdown = async (signal) => {
+  console.log(`\n⚠️  ${signal} received, starting graceful shutdown...`);
+
+  // Close HTTP server first (stop accepting new connections)
+  server.close(() => {
+    console.log('✅ HTTP server closed');
+  });
+
+  // Close Redis connection
+  if (redisClient && redisClient.isOpen) {
+    try {
+      await redisClient.quit();
+      console.log('✅ Redis connection closed');
+    } catch (err) {
+      console.error('❌ Error closing Redis:', err);
+    }
+  }
+
+  console.log('👋 Shutdown complete, exiting...');
+  process.exit(0);
+};
+
+// Handle Ctrl+C
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle termination signal (e.g., from kill command)
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
