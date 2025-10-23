@@ -945,6 +945,8 @@ const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_KEY;
 const ACC = process.env.ACCOUNT_SID;
 const TOK = process.env.AUTH_TOKEN;
+const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER || '+447888873477';
+const TWILIO_WHATSAPP_NUMBER = `whatsapp:${TWILIO_PHONE_NUMBER}`;
 
 console.log('🔌 Connecting to Supabase...');
 console.log('  - URL exists:', !!SB_URL);
@@ -955,6 +957,61 @@ const db = createClient(SB_URL, SB_KEY, {
 });
 
 console.log('✅ Supabase client created');
+
+// Initialize Twilio REST API client
+const twilio = require('twilio');
+const twilioClient = twilio(ACC, TOK);
+console.log('✅ Twilio REST API client initialized');
+console.log(`📱 WhatsApp number: ${TWILIO_WHATSAPP_NUMBER}`);
+
+// ============================================================================
+// WHATSAPP MESSAGE SENDING HELPER (REST API)
+// ============================================================================
+
+/**
+ * Send a WhatsApp message using Twilio REST API
+ * @param {string} toPhone - Phone number with country code (e.g., "+923314074097")
+ * @param {string} messageBody - Message content to send
+ * @returns {Promise<object>} - Twilio message object
+ */
+const sendWhatsAppMessage = async (toPhone, messageBody) => {
+  try {
+    console.log(`📤 Sending WhatsApp message to ${toPhone} (${messageBody.length} chars)`);
+
+    const message = await twilioClient.messages.create({
+      body: messageBody,
+      from: TWILIO_WHATSAPP_NUMBER,
+      to: `whatsapp:${toPhone}`
+    });
+
+    console.log(`✅ Message sent successfully (SID: ${message.sid})`);
+    return message;
+  } catch (error) {
+    console.error('❌ Error sending WhatsApp message:', error);
+    throw error;
+  }
+};
+
+/**
+ * Send multiple WhatsApp messages with delay between chunks
+ * @param {string} toPhone - Phone number
+ * @param {string[]} messageChunks - Array of message strings
+ * @param {number} delayMs - Delay between messages in milliseconds
+ */
+const sendWhatsAppMessageChunks = async (toPhone, messageChunks, delayMs = 1000) => {
+  console.log(`📦 Sending ${messageChunks.length} message chunk(s) to ${toPhone}`);
+
+  for (let i = 0; i < messageChunks.length; i++) {
+    await sendWhatsAppMessage(toPhone, messageChunks[i]);
+
+    // Add delay between chunks (except for last one)
+    if (i < messageChunks.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  console.log('✅ All message chunks sent successfully');
+};
 
 // ============================================================================
 // STRIPE ID CLEANUP UTILITIES
@@ -1277,11 +1334,11 @@ function splitLongParagraph(paragraph, maxLength) {
 }
 
 // ============================================================================
-// WHATSAPP WEBHOOK
+// WHATSAPP WEBHOOK (ASYNC PATTERN - IMMEDIATE RESPONSE)
 // ============================================================================
 
 app.post('/webhook', async (req, res) => {
-  const twiml = new MessagingResponse();
+  // Extract request data immediately
   const from = req.body.From;
   const bodyText = req.body.Body || '';
   const mUrl = req.body.MediaUrl0;
@@ -1297,35 +1354,55 @@ app.post('/webhook', async (req, res) => {
   const phone = normalizePhoneNumber(rawPhone);
   console.log('📞 Phone normalization:', rawPhone, '->', phone);
 
-  // Check for video and reject
-  const isVideo = mType.startsWith('video/');
-  if (isVideo) {
-    console.log('🚫 Video detected and rejected');
-    twiml.message('Sorry, I can only analyze images of food, not videos. Please send a photo instead! 📸');
-    return res.type('text/xml').send(twiml.toString());
-  }
+  // ============================================================================
+  // IMMEDIATE RESPONSE - Return 200 OK to Twilio right away
+  // ============================================================================
+  res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response></Response>');
+  console.log('✅ 200 OK sent to Twilio immediately - Processing message async...');
 
-  // 🔒 SECURITY CHECK: Verify user authorization FIRST
-  const authResult = await verifyUserAuthorization(phone);
-  
-  if (!authResult.authorized) {
-    // Track this unauthorized attempt
-    const attemptCount = trackUnauthorizedAttempt(phone);
-    
-    console.log('🚫 SILENT BLOCK: Ignoring unauthorized user');
-    console.log('   - Phone:', phone);
-    console.log('   - Reason:', authResult.reason);
-    console.log('   - Attempts:', attemptCount);
-    console.log('   - Action: Complete ignore (no response sent)');
-    console.log('   - Protection: Saving OpenAI API costs');
-    
-    // 🚨 IMPORTANT: Return empty TwiML response (no message sent)
-    return res.type('text/xml').send('<Response></Response>');
-  }
-  
-  console.log('✅ AUTHORIZED USER - Processing message');
-  console.log(`   - Phone: ${phone}`);
-  console.log(`   - User ID: ${authResult.user.id}`);
+  // ============================================================================
+  // ASYNC PROCESSING - No timeout constraints
+  // ============================================================================
+  processMessageAsync(phone, bodyText, mUrl, mType, isImg, isAudio).catch(error => {
+    console.error('❌ Fatal error in async processing:', error);
+    console.error('📍 Error stack:', error.stack);
+  });
+});
+
+/**
+ * Process WhatsApp message asynchronously (no time constraints)
+ */
+const processMessageAsync = async (phone, bodyText, mUrl, mType, isImg, isAudio) => {
+  try {
+    // Check for video and reject
+    const isVideo = mType.startsWith('video/');
+    if (isVideo) {
+      console.log('🚫 Video detected and rejected');
+      await sendWhatsAppMessage(phone, 'Sorry, I can only analyze images of food, not videos. Please send a photo instead! 📸');
+      return;
+    }
+
+    // 🔒 SECURITY CHECK: Verify user authorization FIRST
+    const authResult = await verifyUserAuthorization(phone);
+
+    if (!authResult.authorized) {
+      // Track this unauthorized attempt
+      const attemptCount = trackUnauthorizedAttempt(phone);
+
+      console.log('🚫 SILENT BLOCK: Ignoring unauthorized user');
+      console.log('   - Phone:', phone);
+      console.log('   - Reason:', authResult.reason);
+      console.log('   - Attempts:', attemptCount);
+      console.log('   - Action: Complete ignore (no response sent)');
+      console.log('   - Protection: Saving OpenAI API costs');
+
+      // Silent ignore - no message sent to unauthorized users
+      return;
+    }
+
+    console.log('✅ AUTHORIZED USER - Processing message');
+    console.log(`   - Phone: ${phone}`);
+    console.log(`   - User ID: ${authResult.user.id}`);
 
   // ============================================================================
   // INTELLIGENT SESSION & CONTEXT MANAGEMENT WITH CACHING
@@ -1408,9 +1485,8 @@ app.post('/webhook', async (req, res) => {
     console.log('🔍 No first name found in cached profile');
   }
 
-  let text = bodyText.trim();
+    let text = bodyText.trim();
 
-  try {
     if (isAudio && mUrl) {
       const auth = { Authorization: 'Basic ' + Buffer.from(`${ACC}:${TOK}`).toString('base64') };
       const audio = await axios.get(mUrl, { responseType: 'arraybuffer', headers: auth });
@@ -1431,26 +1507,26 @@ app.post('/webhook', async (req, res) => {
       
       if (command === '/' || command === '/help') {
         // Show command menu when user types just "/"
-        twiml.message(`Available commands:
+        await sendWhatsAppMessage(phone, `Available commands:
 
-- */dashboard* - Get your personal dashboard link  
+- */dashboard* - Get your personal dashboard link
 - */support* - Get support contact information
 
 Just type any command to use it!`);
-        return res.type('text/xml').send(twiml.toString());
+        return;
       }
-      
+
       else if (command === '/dashboard') {
         console.log('🔗 Dashboard command received from:', phone);
-        
+
         try {
           // Generate dashboard link
           const dashboardResponse = await axios.post(`${process.env.BASE_URL || 'http://localhost:8080'}/api/generate-dashboard-link`, {
             phone_number: phone
           });
-                                                                                                 
+
           const { dashboard_url, user_name } = dashboardResponse.data;
-          
+
           const dashboardMessage = `Hi ${user_name || 'there'}! 👋
 
 🔗 Access your personal dashboard here:
@@ -1458,54 +1534,53 @@ ${dashboard_url}
 
 From your dashboard you can:
 - Update your profile information
-- Adjust your calorie and macro goals  
+- Adjust your calorie and macro goals
 - Manage your subscription
 - View your account details
 
 This link is personalized for your account. Keep it secure!`;
 
-          twiml.message(dashboardMessage);
-          return res.type('text/xml').send(twiml.toString());
-          
+          await sendWhatsAppMessage(phone, dashboardMessage);
+          return;
+
         } catch (error) {
           console.error('❌ Error generating dashboard link:', error);
-          twiml.message('Sorry, I had trouble generating your dashboard link. Please try again later or contact support.');
-          return res.type('text/xml').send(twiml.toString());
+          await sendWhatsAppMessage(phone, 'Sorry, I had trouble generating your dashboard link. Please try again later or contact support.');
+          return;
         }
       }
-      
+
       else if (command === '/support') {
         console.log('📞 Support command received from:', phone);
-        
+
         try {
           const supportResponse = await axios.get(`${process.env.BASE_URL || 'http://localhost:8080'}/api/support-info`);
           const { support_message, support_phone, support_hours } = supportResponse.data;
-          
+
           const supportMessage = `${support_message}
 
 📲💬 WhatsaApp Only: ${support_phone}
 🕒 ${support_hours}
 `;
 
-          twiml.message(supportMessage);
-          return res.type('text/xml').send(twiml.toString());
-          
+          await sendWhatsAppMessage(phone, supportMessage);
+          return;
+
         } catch (error) {
           console.error('❌ Error getting support info:', error);
-          twiml.message('📞 Need help? Contact our support team at +1234567890 or reply to this chat!');
-          return res.type('text/xml').send(twiml.toString());
+          await sendWhatsAppMessage(phone, '📞 Need help? Contact our support team at +1234567890 or reply to this chat!');
+          return;
         }
       }
-      
+
       else {
         // Unknown command
-        twiml.message(`
-Available commands:
+        await sendWhatsAppMessage(phone, `Available commands:
 - */dashboard* - Get your personal dashboard link
 - */support* - Get support contact information
 
 💡 Tip: Just type / to see available commands, or type any command manually!`);
-        return res.type('text/xml').send(twiml.toString());
+        return;
       }
     }
 
@@ -1570,8 +1645,8 @@ Available commands:
     let row = data?.[0];
     if (!row) {
       console.error('⚠️ Authorized user has no data in get_user_data RPC');
-      twiml.message('⚠️ Account error. Please contact support.');
-      return res.type('text/xml').send(twiml.toString());
+      await sendWhatsAppMessage(phone, '⚠️ Account error. Please contact support.');
+      return;
     }
 
     const goals = { kcal: row.kcal_goal, prot: row.prot_goal, carb: row.carb_goal, fat: row.fat_goal };
@@ -1797,71 +1872,45 @@ Available commands:
     // The LLM decides what functions to call, and the tool execution layer handles all operations
 
     // ============================================================================
-    // INTELLIGENT MESSAGE CHUNKING FOR LONG RESPONSES
+    // SEND RESPONSE VIA REST API (NO TIMEOUT CONSTRAINTS)
     // ============================================================================
-    
+
     // Check if message exceeds WhatsApp limit (1600 chars)
     if (reply && reply.length > 1500) {
       console.log('📏 Long message detected:', reply.length, 'characters');
       console.log('✂️ Splitting into chunks...');
-      
+
       // Split message intelligently
       const chunks = splitMessageIntelligently(reply);
-      
+
       console.log('📦 Created', chunks.length, 'message chunks');
-      
-      // Send each chunk with small delay
-      for (let i = 0; i < chunks.length; i++) {
-        console.log(`📤 Sending chunk ${i + 1}/${chunks.length}:`, chunks[i].substring(0, 100) + '...');
-        twiml.message(chunks[i]);
-        
-        // Add small delay between chunks (except for last one)
-        if (i < chunks.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-      
-      console.log('💬 All message chunks sent successfully');
+
+      // Send chunks via REST API
+      await sendWhatsAppMessageChunks(phone, chunks, 1000);
     } else {
-      // Normal single message
-      twiml.message(reply);
-      console.log('💬 Single message sent:', reply.length, 'characters');
+      // Normal single message via REST API
+      await sendWhatsAppMessage(phone, reply);
     }
-    
+
     // Save updated session to Redis
     if (userSession) {
       await updateUserSession(phone, userSession);
       console.log('💾 Final session save completed');
     }
 
-    // Send response back to Twilio/WhatsApp
-    try {
-      const twimlString = twiml.toString();
-      console.log('📤 TwiML generated, sending to Twilio...');
-      console.log(`📋 TwiML length: ${twimlString.length} characters`);
-      console.log('📋 TwiML content:');
-      console.log(twimlString);
-      res.type('text/xml').send(twimlString);
-      console.log('✅ Response sent to Twilio successfully');
-    } catch (sendError) {
-      console.error('❌ Error generating/sending TwiML:', sendError);
-      const errorTwiml = new Twilio.twiml.MessagingResponse();
-      errorTwiml.message('⚠️ Technical error occurred. Please try again.');
-      res.type('text/xml').send(errorTwiml.toString());
-    }
+    console.log('✅ Message processing complete');
   } catch (err) {
-    console.error('⚠️ Error in webhook:', err);
+    console.error('⚠️ Error in async message processing:', err);
     console.error('📍 Error stack:', err.stack);
+
+    // Send error message to user via REST API
     try {
-      const errorTwiml = new Twilio.twiml.MessagingResponse();
-      errorTwiml.message('⚠️ Something went wrong. Please try again.');
-      res.type('text/xml').send(errorTwiml.toString());
-    } catch (fallbackError) {
-      console.error('❌ Even error response failed:', fallbackError);
-      res.status(500).send('Error');
+      await sendWhatsAppMessage(phone, '⚠️ Something went wrong processing your message. Please try again.');
+    } catch (sendError) {
+      console.error('❌ Failed to send error message to user:', sendError);
     }
   }
-});
+};
 
 // ============================================================================
 // VOICE VERIFICATION WEBHOOK WITH RECORDING (for Facebook phone call)
