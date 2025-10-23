@@ -47,13 +47,13 @@ const getFunctionDefinitions = () => [
     type: 'function',
     function: {
       name: 'update_meal',
-      description: 'ALWAYS CALL THIS TOOL TO UPDATE A MEAL. Update a previously logged meal. Use when the user wants to correct, modify, or adjust a meal entry.',
+      description: 'ALWAYS CALL THIS TOOL TO UPDATE A MEAL. Update a previously logged meal. IMPORTANT: First call get_meal_history to see all meals with their meal_numbers, then use the meal_number to identify which meal to update.',
       parameters: {
         type: 'object',
         properties: {
           meal_identifier: {
             type: 'string',
-            description: 'Which meal to update. Use context from conversation to identify (e.g., "most recent", "breakfast", "the salmon meal", "last logged meal")'
+            description: 'The meal_number from get_meal_history (e.g., "1", "2", "3"). This identifies which meal of the day to update based on chronological order.'
           },
           new_description: {
             type: 'string',
@@ -85,13 +85,13 @@ const getFunctionDefinitions = () => [
     type: 'function',
     function: {
       name: 'delete_meal',
-      description: 'Remove a meal from today\'s log. Use when the user wants to delete, remove, or cancel a meal entry.',
+      description: 'Remove a meal from today\'s log. IMPORTANT: First call get_meal_history to see all meals with their meal_numbers, then use the meal_number to identify which meal to delete.',
       parameters: {
         type: 'object',
         properties: {
           meal_identifier: {
             type: 'string',
-            description: 'Which meal to delete. Use context from conversation (e.g., "most recent", "last logged meal", "breakfast", "the sandwich")'
+            description: 'The meal_number from get_meal_history (e.g., "1", "2", "3"). This identifies which meal of the day to delete based on chronological order.'
           }
         },
         required: ['meal_identifier']

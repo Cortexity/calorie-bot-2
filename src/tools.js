@@ -247,45 +247,43 @@ const updateMealTool = async (args, context) => {
     // Create temp key for tracking
     tempKey = `temp:meals:${phone}:${Date.now()}`;
 
-    // Get recent meals to find which one to update
-    const { data: recentMeals, error: fetchError } = await db
+    // Get today's meals in chronological order (to match get_meal_history numbering)
+    const { data: todayMeals, error: fetchError } = await db
       .from('meal_logs')
       .select('*')
       .eq('user_phone', phone)
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
-      .order('created_at', { ascending: false })
-      .limit(10);
+      .order('created_at', { ascending: true });
 
     if (fetchError) {
-      throw new Error(`Failed to fetch recent meals: ${fetchError.message}`);
+      throw new Error(`Failed to fetch meals: ${fetchError.message}`);
     }
 
-    if (!recentMeals || recentMeals.length === 0) {
+    if (!todayMeals || todayMeals.length === 0) {
       return {
         success: false,
         error: 'No meals found today to update. Try logging a meal first!'
       };
     }
 
-    // Cache meal data in Redis for context
-    if (redisClient) {
-      await redisClient.setEx(tempKey, 300, JSON.stringify(recentMeals));
+    // Convert meal_identifier to array index
+    const mealNumber = parseInt(meal_identifier);
+    if (isNaN(mealNumber) || mealNumber < 1 || mealNumber > todayMeals.length) {
+      return {
+        success: false,
+        error: `Invalid meal number "${meal_identifier}". You have ${todayMeals.length} meal(s) logged today. Please use get_meal_history to see all meals with their numbers.`
+      };
     }
 
-    // Find the meal to update based on identifier
-    let mealToUpdate = recentMeals[0]; // Default to most recent
+    const mealIndex = mealNumber - 1; // Convert to 0-based index
+    const mealToUpdate = todayMeals[mealIndex];
 
-    if (meal_identifier && meal_identifier.toLowerCase() !== 'most recent') {
-      // Try to find meal by description or type
-      const identifier = meal_identifier.toLowerCase();
-      const found = recentMeals.find(m =>
-        m.meal_description.toLowerCase().includes(identifier) ||
-        identifier.includes(m.meal_description.toLowerCase().split(' ')[0])
-      );
-      if (found) {
-        mealToUpdate = found;
-      }
+    console.log(`📍 Updating meal #${mealNumber}: ${mealToUpdate.meal_description}`);
+
+    // Cache meal data in Redis for context
+    if (redisClient) {
+      await redisClient.setEx(tempKey, 300, JSON.stringify(todayMeals));
     }
 
     // Calculate changes for daily totals
@@ -427,44 +425,43 @@ const deleteMealTool = async (args, context) => {
     // Create temp key for tracking
     tempKey = `temp:meals:${phone}:${Date.now()}`;
 
-    // Get recent meals to find which one to delete
-    const { data: recentMeals, error: fetchError } = await db
+    // Get today's meals in chronological order (to match get_meal_history numbering)
+    const { data: todayMeals, error: fetchError } = await db
       .from('meal_logs')
       .select('*')
       .eq('user_phone', phone)
       .gte('created_at', `${today}T00:00:00`)
       .lte('created_at', `${today}T23:59:59`)
-      .order('created_at', { ascending: false })
-      .limit(10);
+      .order('created_at', { ascending: true });
 
     if (fetchError) {
-      throw new Error(`Failed to fetch recent meals: ${fetchError.message}`);
+      throw new Error(`Failed to fetch meals: ${fetchError.message}`);
     }
 
-    if (!recentMeals || recentMeals.length === 0) {
+    if (!todayMeals || todayMeals.length === 0) {
       return {
         success: false,
         error: 'No meals found today to delete.'
       };
     }
 
-    // Cache meal data in Redis for context
-    if (redisClient) {
-      await redisClient.setEx(tempKey, 300, JSON.stringify(recentMeals));
+    // Convert meal_identifier to array index
+    const mealNumber = parseInt(meal_identifier);
+    if (isNaN(mealNumber) || mealNumber < 1 || mealNumber > todayMeals.length) {
+      return {
+        success: false,
+        error: `Invalid meal number "${meal_identifier}". You have ${todayMeals.length} meal(s) logged today. Please use get_meal_history to see all meals with their numbers.`
+      };
     }
 
-    // Find the meal to delete based on identifier
-    let mealToDelete = recentMeals[0]; // Default to most recent
+    const mealIndex = mealNumber - 1; // Convert to 0-based index
+    const mealToDelete = todayMeals[mealIndex];
 
-    if (meal_identifier && meal_identifier.toLowerCase() !== 'most recent') {
-      const identifier = meal_identifier.toLowerCase();
-      const found = recentMeals.find(m =>
-        m.meal_description.toLowerCase().includes(identifier) ||
-        identifier.includes(m.meal_description.toLowerCase().split(' ')[0])
-      );
-      if (found) {
-        mealToDelete = found;
-      }
+    console.log(`📍 Deleting meal #${mealNumber}: ${mealToDelete.meal_description}`);
+
+    // Cache meal data in Redis for context
+    if (redisClient) {
+      await redisClient.setEx(tempKey, 300, JSON.stringify(todayMeals));
     }
 
     // Delete the meal
@@ -665,7 +662,8 @@ const getMealHistoryTool = async (context) => {
     }
 
     const formattedMeals = meals && meals.length > 0
-      ? meals.map((meal) => ({
+      ? meals.map((meal, index) => ({
+          meal_number: index + 1,  // AI-friendly identifier for update/delete operations
           description: meal.meal_description,
           calories: meal.kcal,
           protein: meal.prot,
@@ -691,11 +689,9 @@ const getMealHistoryTool = async (context) => {
       meals: formattedMeals,
       total_meals: formattedMeals.length,
       formatted_display: formattedDisplay,
-      response_instructions: `Present the user's meal history using this formatted display:
+      response_instructions: `If you are presenting the meal history to the the user, present it using the formatted_display provided in this tool response.
 
-${formattedDisplay}
-
-This shows all meals they've logged today with complete nutritional information.`
+If you called this tool internally to identify a meal for update/delete operations, do NOT display the formatted_display to the user. Instead, use the meals array to identify which meal_number corresponds to the user's request, then call the appropriate update_meal or delete_meal function with that meal_number.`
     };
   } catch (error) {
     console.error('❌ Get meal history error:', error);

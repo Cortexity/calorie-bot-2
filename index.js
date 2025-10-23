@@ -1645,7 +1645,7 @@ Available commands:
     let reply = '';
     let continueLoop = true;
     let iterations = 0;
-    const maxIterations = 5; // Safety limit to prevent infinite loops
+    const maxIterations = 10; // Safety limit to prevent infinite loops
     let lastDashboardLink = null; // Track if we need dashboard link handling
 
     while (continueLoop && iterations < maxIterations) {
