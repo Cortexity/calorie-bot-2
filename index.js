@@ -1013,6 +1013,26 @@ const sendWhatsAppMessageChunks = async (toPhone, messageChunks, delayMs = 1000)
   console.log('✅ All message chunks sent successfully');
 };
 
+/**
+ * Sanitize AI messages for WhatsApp formatting
+ * Replaces double asterisks (**) with single asterisks (*)
+ * because WhatsApp uses single asterisks for bold text
+ */
+const sanitizeAIMessage = (messageContent) => {
+  if (!messageContent || typeof messageContent !== 'string') {
+    return messageContent;
+  }
+
+  // Replace all occurrences of ** with *
+  const sanitized = messageContent.replace(/\*\*/g, '*');
+
+  if (sanitized !== messageContent) {
+    console.log('🧹 Sanitized message: replaced double asterisks with single asterisks');
+  }
+
+  return sanitized;
+};
+
 // ============================================================================
 // STRIPE ID CLEANUP UTILITIES
 // ============================================================================
@@ -1540,7 +1560,7 @@ From your dashboard you can:
 
 This link is personalized for your account. Keep it secure!`;
 
-          await sendWhatsAppMessage(phone, dashboardMessage);
+          await sendWhatsAppMessage(phone, sanitizeAIMessage(dashboardMessage));
           return;
 
         } catch (error) {
@@ -1563,7 +1583,7 @@ This link is personalized for your account. Keep it secure!`;
 🕒 ${support_hours}
 `;
 
-          await sendWhatsAppMessage(phone, supportMessage);
+          await sendWhatsAppMessage(phone, sanitizeAIMessage(supportMessage));
           return;
 
         } catch (error) {
@@ -1795,9 +1815,15 @@ This link is personalized for your account. Keep it secure!`;
         // Loop continues - LLM will process results in next iteration
       } else {
         // No tool calls - LLM generated final response
+        // Sanitize the content before saving and sending
+        const sanitizedContent = sanitizeAIMessage(assistantMessage.content);
+
+        // Update the assistant message content with sanitized version
+        assistantMessage.content = sanitizedContent;
+
         // Add the final assistant message to the conversation history
         messages.push(assistantMessage);
-        reply = assistantMessage.content;
+        reply = sanitizedContent;
         continueLoop = false;
         console.log(`💬 LLM generated final response (loop complete after ${iterations} iteration(s))`);
       }
@@ -1829,6 +1855,9 @@ This link is personalized for your account. Keep it secure!`;
 
         // Use generateDashboardRedirectMessage with the URL (generic field for profile updates)
         reply = generateDashboardRedirectMessage('profile', user_name, dashboard_url);
+
+        // Sanitize the dashboard message before sending and saving
+        reply = sanitizeAIMessage(reply);
 
         // Update the last assistant message in the conversation to reflect what was actually sent
         // This ensures conversation history matches what the user saw
