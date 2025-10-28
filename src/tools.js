@@ -50,7 +50,7 @@ const generateStandardizedProgressDisplay = (used, goals) => {
 🥔${getTrafficLight(carbPct)} *Carbs:* ${used.carb}/${goals.carb} g
 🧈${getTrafficLight(fatPct)} *Fats:* ${used.fat}/${goals.fat} g
 
-There's your progress update! How are you feeling about hitting your targets today?`;
+There's your progress update!`;
 };
 
 // ============================================================================
