@@ -2660,15 +2660,15 @@ app.post('/trigger-welcome', async (req, res) => {
         fitnessGoal = actualCalories < 1500 ? 'lose_weight' : actualCalories > 2500 ? 'gain_weight' : 'maintain_build';
     }
     
-    // Determine goal text
-    let goalText = '*Maintain weight but build muscle*';
+    // Determine goal text (plain text for template, no asterisks)
+    let goalText = 'Maintain weight but build muscle';
     let motivationText = 'If you stay consistent, you will lose fat and gain muscle over time, while keeping your weight stable 💪';
-    
+
     if (fitnessGoal === 'lose_weight') {
-      goalText = '*Lose weight*';
+      goalText = 'Lose weight';
       motivationText = 'If you stay consistent, you will lose weight and reach your ideal body type 🧘‍♂️🥗';
     } else if (fitnessGoal === 'gain_weight') {
-      goalText = '*Gain weight & muscle*';
+      goalText = 'Gain weight & muscle';
       motivationText = 'If you stay consistent, you will gain weight by building muscle over time 🏋️‍♂️🍽️';
     }
     
@@ -2688,58 +2688,59 @@ app.post('/trigger-welcome', async (req, res) => {
           ? userRecord[0].first_name 
           : '';
 
-    const dietPreference = userRecord && userRecord[0] && userRecord[0].diet_preference 
-    ? userRecord[0].diet_preference 
+    const dietPreference = userRecord && userRecord[0] && userRecord[0].diet_preference
+    ? userRecord[0].diet_preference
     : null;
-    
-    const personalGreeting = firstName 
-      ? `Welcome to *IQCalorie*, ${firstName}! 🔥` 
-      : `Welcome to *IQCalorie*! 🔥`;
-    
-    console.log('👋 Personal greeting:', personalGreeting);
 
-    const welcomeMessage = `${personalGreeting}
+    // Format diet preference for template (handle null case)
+    const formattedDiet = dietPreference
+      ? dietPreference.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).trim()
+      : 'No specific diet';
 
-🚀 You're all set and ready to go!
+    console.log('👋 Preparing template variables for:', firstName || 'user');
+    console.log('📊 Template data:', {
+      firstName: firstName || 'there',
+      actualCalories,
+      actualProtein,
+      actualCarbs,
+      actualFat,
+      actualTDEE,
+      actualWeight,
+      goalText,
+      formattedDiet,
+      motivationText
+    });
 
-You can start texting me now! 💪✅
-
-*Here are your Key Numbers:*
-
-*New Targets:*
-🔥 Calories: *${actualCalories}kcal*
-🥩 Protein: *${actualProtein}g*
-🥔 Carbs: *${actualCarbs}g*
-🧈 Fats: *${actualFat}g*
-
-*Your Health:*
-🔥 TDEE: *${actualTDEE} calories*
-⚖️ Current Weight: *${actualWeight}kg*
-🎯 Goal: ${goalText}
-${dietPreference ? `🍽️ Diet: ${dietPreference.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}` : ''}
-
-⚖️ ${motivationText}
-
-I will take these numbers into account when talking to you!
-
-Now Snap a photo of your most recent meal! 📸🍽️`;
-
-    // Send WhatsApp message using Twilio
+    // Send WhatsApp message using approved template
     try {
       const twilio = require('twilio')(process.env.ACCOUNT_SID, process.env.AUTH_TOKEN);
-      
+
       const message = await twilio.messages.create({
         from: 'whatsapp:+447888873477',
         to: `whatsapp:${formattedPhone}`,
-        body: welcomeMessage
+        contentSid: 'HX0693c71ffe84119d51bfaa8f098c8fc0', // triggerwelcome template
+        contentVariables: JSON.stringify({
+          '1': firstName || 'there',
+          '2': actualCalories.toString(),
+          '3': actualProtein.toString(),
+          '4': actualCarbs.toString(),
+          '5': actualFat.toString(),
+          '6': actualTDEE.toString(),
+          '7': actualWeight.toString(),
+          '8': goalText,
+          '9': formattedDiet,
+          '10': motivationText
+        })
       });
       
-      console.log('✅ WhatsApp welcome message sent:', message.sid);
-      
+      console.log('✅ WhatsApp template message sent successfully');
+      console.log('📱 Message SID:', message.sid);
+
       res.json({
         success: true,
-        message: 'Welcome message sent successfully',
-        messageSid: message.sid
+        message: 'Welcome template message sent successfully',
+        messageSid: message.sid,
+        templateUsed: 'triggerwelcome'
       });
       
     } catch (twilioError) {
