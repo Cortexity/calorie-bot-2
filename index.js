@@ -1446,11 +1446,17 @@ const processMessageAsync = async (phone, bodyText, mUrl, mType, isImg, isAudio)
 
   if (userSession?.conversationHistory && userSession.conversationHistory.length > 0) {
     console.log('\n📦 REDIS CACHE - ALL MESSAGES:');
-    const userMsgCount = userSession.conversationHistory.filter(m => m.role === 'user').length;
-    const toolMsgCount = userSession.conversationHistory.filter(m => m.role === 'tool').length;
-    const assistantMsgCount = userSession.conversationHistory.filter(m => m.role === 'assistant').length;
+    const userMsgCount = userSession.conversationHistory.filter(m => m && m.role === 'user').length;
+    const toolMsgCount = userSession.conversationHistory.filter(m => m && m.role === 'tool').length;
+    const assistantMsgCount = userSession.conversationHistory.filter(m => m && m.role === 'assistant').length;
 
     userSession.conversationHistory.forEach((message, index) => {
+      // Skip invalid messages without a role
+      if (!message || !message.role) {
+        console.log(`  [${index + 1}/${userSession.conversationHistory.length}] ⚠️ INVALID MESSAGE (no role): ${JSON.stringify(message)}`);
+        return;
+      }
+
       const roleEmoji = {
         'user': '👤',
         'assistant': '🤖',
@@ -1619,6 +1625,11 @@ This link is personalized for your account. Keep it secure!`;
       let userMsgCount = 0;
 
       recentMessages.forEach((message, index) => {
+        // Skip invalid messages
+        if (!message || !message.role) {
+          return;
+        }
+
         if (message.role === 'user') {
           userMsgCount++;
           let preview = '';
@@ -1693,7 +1704,7 @@ This link is personalized for your account. Keep it secure!`;
     if (userSession?.conversationHistory && userSession.conversationHistory.length > 0) {
       // Find indices of the last 10 user messages
       const userMessageIndices = userSession.conversationHistory
-        .map((msg, i) => msg.role === 'user' ? i : -1)
+        .map((msg, i) => (msg && msg.role === 'user') ? i : -1)
         .filter(i => i !== -1)
         .slice(-10); // Get last 10 user message indices
 
@@ -1701,8 +1712,17 @@ This link is personalized for your account. Keep it secure!`;
         // Start from the 10th most recent user message
         const startIndex = userMessageIndices[0];
         const recentMessages = userSession.conversationHistory.slice(startIndex);
-        messages.push(...recentMessages);
-        console.log(`📝 Added ${recentMessages.length} messages to context (including ${userMessageIndices.length} user messages and all intermediate tool/assistant messages)`);
+
+        // Filter out invalid messages (without role property)
+        const validMessages = recentMessages.filter(msg => msg && msg.role);
+        const invalidCount = recentMessages.length - validMessages.length;
+
+        if (invalidCount > 0) {
+          console.warn(`⚠️ Filtered out ${invalidCount} invalid message(s) from conversation history`);
+        }
+
+        messages.push(...validMessages);
+        console.log(`📝 Added ${validMessages.length} messages to context (including ${userMessageIndices.length} user messages and all intermediate tool/assistant messages)`);
       }
     }
 
