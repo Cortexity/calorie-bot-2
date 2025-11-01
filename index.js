@@ -2456,9 +2456,22 @@ app.post('/complete-user-setup', async (req, res) => {
       // FIXED: Set weekly_weight_goal to null for maintain_build users
       weekly_weight_goal: userData?.fitness_goal === 'maintain_build' ? null : (userData?.weekly_weight_goal || null),
       
+      // Meta Tracking Data (Facebook Pixel)
+      meta_fbp: userData?.meta_fbp || null,
+      meta_fbc: userData?.meta_fbc || null,
+      meta_event_id: userData?.meta_event_id || null,
+      trial_plan: userData?.trial_plan || 'monthly',
+      
       // Timestamp
       created_at: new Date().toISOString()
     };
+    
+    console.log('📊 Meta tracking data being saved:', {
+      meta_fbp: finalUserData.meta_fbp ? 'Present' : 'Missing',
+      meta_fbc: finalUserData.meta_fbc ? 'Present' : 'Missing',
+      meta_event_id: finalUserData.meta_event_id ? 'Present' : 'Missing',
+      trial_plan: finalUserData.trial_plan
+    });
     
     console.log('🎯 Final user data for Supabase:', finalUserData);
     

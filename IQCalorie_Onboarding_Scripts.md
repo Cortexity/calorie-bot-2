@@ -3313,8 +3313,10 @@ async function redirectToCheckout(planType) {
     
     try {
         console.log("📞 Calling backend to create checkout session...");
+        console.log("🎯 Target URL: https://calorie-bot-2-production-73cb.up.railway.app/create-checkout-session");
+        console.log("📦 Request body:", { priceId, checkoutKey, phoneNumber, email });
         
-        const response = await fetch('https://bass-ethical-piranha.ngrok-free.app/create-checkout-session', {
+        const response = await fetch('https://calorie-bot-2-production-73cb.up.railway.app/create-checkout-session', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -3327,8 +3329,14 @@ async function redirectToCheckout(planType) {
             })
         });
         
+        console.log("📡 Response status:", response.status);
+        console.log("📡 Response ok:", response.ok);
+        console.log("📡 Response headers:", response.headers);
+        
         if (!response.ok) {
-            throw new Error('Failed to create checkout session');
+            const errorText = await response.text();
+            console.error("❌ Server error response:", errorText);
+            throw new Error(`Failed to create checkout session: ${response.status} - ${errorText}`);
         }
         
         const data = await response.json();
@@ -3346,7 +3354,10 @@ async function redirectToCheckout(planType) {
         
     } catch (error) {
         console.error("❌ Error creating checkout session:", error);
-        alert("Error processing payment. Please try again.");
+        console.error("❌ Error name:", error.name);
+        console.error("❌ Error message:", error.message);
+        console.error("❌ Error stack:", error.stack);
+        alert(`Error processing payment: ${error.message}. Please check console for details.`);
     }
 }
     
@@ -3484,6 +3495,73 @@ if (urlParams.get('preview') === 'true') {
 } else if (!localStorage.getItem('weeklyWeightGoal') || (!document.referrer.includes('iqcalorie.com') && !document.referrer.includes('stripe.com'))) {
   window.location.replace('https://www.iqcalorie.com/landing');
 }
+</script>
+
+<!-- Meta Pixel Code -->
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '1625548858408033');
+fbq('track', 'PageView');
+
+// Initiate Checkout tracking for Monthly and Yearly buttons
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🎯 Meta Pixel: Initiate Checkout listeners ready');
+    
+    // Get Monthly and Yearly buttons by their IDs
+    const monthlyButton = document.getElementById('monthlyButton');
+    const yearlyButton = document.getElementById('animatedButton');
+    
+    // Track Monthly button click
+    if (monthlyButton) {
+        monthlyButton.addEventListener('click', function() {
+            console.log('🔔 Tracking: InitiateCheckout - Monthly Plan');
+            
+            // Store plan selection for confirmation page
+            localStorage.setItem('selectedPlan', 'monthly');
+            console.log('💾 Stored plan: monthly');
+            
+            // Fire Meta Pixel InitiateCheckout event
+            fbq('track', 'InitiateCheckout', {
+                content_name: 'Monthly Plan',
+                content_category: 'Subscription',
+                value: 19.99,
+                currency: 'USD'
+            });
+        });
+        console.log('✅ Monthly button (#monthlyButton) listener attached');
+    } else {
+        console.warn('⚠️ Monthly button (#monthlyButton) not found');
+    }
+    
+    // Track Yearly button click
+    if (yearlyButton) {
+        yearlyButton.addEventListener('click', function() {
+            console.log('🔔 Tracking: InitiateCheckout - Yearly Plan');
+            
+            // Store plan selection for confirmation page
+            localStorage.setItem('selectedPlan', 'yearly');
+            console.log('💾 Stored plan: yearly');
+            
+            // Fire Meta Pixel InitiateCheckout event
+            fbq('track', 'InitiateCheckout', {
+                content_name: 'Yearly Plan',
+                content_category: 'Subscription',
+                value: 59.88,
+                currency: 'USD'
+            });
+        });
+        console.log('✅ Yearly button (#animatedButton) listener attached');
+    } else {
+        console.warn('⚠️ Yearly button (#animatedButton) not found');
+    }
+});
 </script>
 
 
@@ -3742,7 +3820,7 @@ if (urlParams.get('preview') === 'true') {
                 console.log("  - userData.phone_number:", requestData.userData.phone_number);
                 console.log("  - Complete requestData:", JSON.stringify(requestData, null, 2));
 
-                const backendUrl = 'https://bass-ethical-piranha.ngrok-free.app/complete-user-setup';
+                const backendUrl = 'https://calorie-bot-2-production-73cb.up.railway.app/complete-user-setup';
                 console.log("?? Sending POST request to:", backendUrl);
 
                 // Make the actual request
@@ -3802,7 +3880,7 @@ if (urlParams.get('preview') === 'true') {
 
                 console.log("?? Sending welcome trigger with data:", welcomeData);
 
-                const response = await fetch('https://bass-ethical-piranha.ngrok-free.app/trigger-welcome', {
+                const response = await fetch('https://calorie-bot-2-production-73cb.up.railway.app/trigger-welcome', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -3952,8 +4030,9 @@ if (urlParams.get('preview') === 'true') {
 </script>
 
 
+
 <!-- Insert HEADER script for Confirmation -->
- <script>
+<script>
 const urlParams = new URLSearchParams(window.location.search);
 if (urlParams.get('preview') === 'true') {
   console.log('Edit mode - bypassing protection');
@@ -3961,6 +4040,143 @@ if (urlParams.get('preview') === 'true') {
   window.location.replace('https://www.iqcalorie.com/landing');
 }
 </script>
+
+<!-- Meta Pixel Code -->
+<script>
+!function(f,b,e,v,n,t,s)
+{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+n.queue=[];t=b.createElement(e);t.async=!0;
+t.src=v;s=b.getElementsByTagName(e)[0];
+s.parentNode.insertBefore(t,s)}(window, document,'script',
+'https://connect.facebook.net/en_US/fbevents.js');
+fbq('init', '1625548858408033');
+fbq('track', 'PageView');
+
+// StartTrial tracking on confirmation page (trial begins here)
+(function() {
+    console.log('🎯 Meta Pixel: StartTrial tracking initialized');
+    
+    // Get the selected plan from localStorage (stored when button was clicked)
+    const selectedPlan = localStorage.getItem('selectedPlan');
+    
+    console.log('📊 Retrieved plan from storage:', selectedPlan);
+    
+    // Define plan details
+    const planDetails = {
+        monthly: {
+            name: 'Monthly Plan - 3 Day Trial',
+            value: 19.99,
+            predicted_ltv: 19.99,
+            content_ids: ['monthly_trial'],
+            num_items: 1
+        },
+        yearly: {
+            name: 'Yearly Plan - 3 Day Trial',
+            value: 59.88,
+            predicted_ltv: 59.88,
+            content_ids: ['yearly_trial'],
+            num_items: 1
+        }
+    };
+    
+    // Get the correct plan data (default to monthly if nothing stored)
+    const plan = planDetails[selectedPlan] || planDetails.monthly;
+    
+    // Log what we're tracking
+    console.log('🔔 Tracking StartTrial Event:');
+    console.log('   - Plan:', plan.name);
+    console.log('   - Predicted LTV: $' + plan.predicted_ltv);
+    console.log('   - Currency: USD');
+    
+    // Fire the StartTrial event to Facebook
+    fbq('track', 'StartTrial', {
+        content_name: plan.name,
+        content_category: 'Subscription Trial',
+        content_ids: plan.content_ids,
+        content_type: 'product',
+        predicted_ltv: plan.predicted_ltv,
+        currency: 'USD',
+        num_items: plan.num_items
+    });
+    
+    console.log('✅ StartTrial event sent to Facebook');
+    
+    // Remove the selectedPlan since we've used it
+    localStorage.removeItem('selectedPlan');
+    
+    // ============================================================================
+    // CAPTURE META TRACKING DATA AND SEND TO BACKEND
+    // ============================================================================
+    
+    console.log('📦 Capturing Meta tracking data for backend...');
+    
+    // Get Facebook pixel cookies for better attribution
+    const getFacebookPixelData = function() {
+        const fbp = getCookie('_fbp');  // Facebook browser ID
+        const fbc = getCookie('_fbc');  // Facebook click ID
+        
+        return {
+            fbp: fbp || null,
+            fbc: fbc || null
+        };
+    };
+    
+    // Helper function to get cookies
+    const getCookie = function(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return null;
+    };
+    
+    // Get the Meta tracking data
+    const metaData = getFacebookPixelData();
+    console.log('📊 Meta tracking data captured:', metaData);
+    
+    // Get user data from localStorage
+    const userPhone = localStorage.getItem('userPhone');
+    const userEmail = localStorage.getItem('userEmail');
+    
+    console.log('📞 User phone:', userPhone);
+    console.log('📧 User email:', userEmail);
+    
+    // Send Meta tracking data to backend to store in Supabase
+    if (userPhone) {
+        console.log('📤 Sending Meta tracking data to backend...');
+        
+        fetch('https://calorie-bot-2-production-73cb.up.railway.app/store-meta-data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                phone_number: userPhone,
+                email: userEmail,
+                meta_fbp: metaData.fbp,
+                meta_fbc: metaData.fbc,
+                trial_plan: selectedPlan || 'monthly'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('✅ Meta tracking data sent to backend:', data);
+        })
+        .catch(error => {
+            console.error('❌ Error sending Meta tracking data:', error);
+        });
+    } else {
+        console.log('⚠️ No phone number found - cannot store Meta tracking data');
+    }
+    
+})();
+
+</script>
+<noscript><img height="1" width="1" style="display:none"
+src="https://www.facebook.com/tr?id=1625548858408033&ev=PageView&noscript=1"
+/></noscript>
+<!-- End Meta Pixel Code -->
 
 
 <!-- Insert CSS FOOTER script for Confirmation -->
@@ -4099,7 +4315,7 @@ if (urlParams.get('preview') === 'true') {
   'use strict';
   
   // Configuration
-  const API_BASE = 'https://bass-ethical-piranha.ngrok-free.app';
+  const API_BASE = 'https://calorie-bot-2-production-73cb.up.railway.app';
   
   // Field mapping: display label → database column
   const FIELD_MAP = {
