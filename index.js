@@ -24,6 +24,126 @@ const { getFunctionDefinitions } = require('./src/functions');
 const { buildSystemPrompt } = require('./src/prompts');
 const { executeTool } = require('./src/tools');
 
+// Import Meta Business SDK for Conversions API
+const bizSdk = require('facebook-nodejs-business-sdk');
+const ServerEvent = bizSdk.ServerEvent;
+const EventRequest = bizSdk.EventRequest;
+const UserData = bizSdk.UserData;
+const CustomData = bizSdk.CustomData;
+
+// Initialize Meta Conversions API
+const metaPixelId = process.env.META_PIXEL_ID;
+const metaAccessToken = process.env.META_CONVERSION_API_TOKEN;
+
+// ============================================================================
+// META CONVERSIONS API - PURCHASE EVENT SENDER
+// ============================================================================
+
+/**
+ * Send Purchase event to Meta via Conversions API
+ * @param {Object} userData - User data from Supabase
+ * @param {Object} stripeData - Stripe charge/invoice data
+ */
+const sendMetaPurchaseEvent = async (userData, stripeData) => {
+  try {
+    console.log('🎯 Preparing Meta Purchase event...');
+    console.log('📊 User data:', {
+      email: userData.email,
+      phone: userData.phone_number,
+      plan: userData.trial_plan
+    });
+    
+    // Define plan details
+    const planDetails = {
+      monthly: {
+        name: 'Monthly Plan',
+        value: 19.99,
+        content_ids: ['monthly_subscription']
+      },
+      yearly: {
+        name: 'Yearly Plan',
+        value: 59.88,
+        content_ids: ['yearly_subscription']
+      }
+    };
+    
+    const plan = planDetails[userData.trial_plan] || planDetails.monthly;
+    
+    // Create user data for the event
+    const metaUserData = new UserData();
+    
+    if (userData.email) {
+      metaUserData.setEmail(userData.email.toLowerCase().trim());
+    }
+    
+    if (userData.phone_number) {
+      // Clean phone number (remove spaces, keep +)
+      const cleanPhone = userData.phone_number.replace(/\s+/g, '');
+      metaUserData.setPhone(cleanPhone);
+    }
+    
+    // Add Facebook browser/click IDs if available (for better attribution)
+    if (userData.meta_fbp) {
+      metaUserData.setFbp(userData.meta_fbp);
+    }
+    
+    if (userData.meta_fbc) {
+      metaUserData.setFbc(userData.meta_fbc);
+    }
+    
+    // Create custom data (purchase details)
+    const customData = new CustomData()
+      .setContentName(plan.name)
+      .setContentCategory('Subscription')
+      .setContentIds(plan.content_ids)
+      .setContentType('product')
+      .setValue(plan.value)
+      .setCurrency('USD')
+      .setNumItems(1);
+    
+    // Create the server event
+    const serverEvent = new ServerEvent()
+      .setEventName('Purchase')
+      .setEventTime(Math.floor(Date.now() / 1000))
+      .setUserData(metaUserData)
+      .setCustomData(customData)
+      .setEventSourceUrl('https://iqcalorie.com/confirmation')
+      .setActionSource('website');
+    
+    // Add event_id if available (prevents duplicates)
+    if (userData.meta_event_id) {
+      serverEvent.setEventId(userData.meta_event_id);
+    }
+    
+    // Create event request
+    const eventRequest = new EventRequest(metaAccessToken, metaPixelId)
+      .setEvents([serverEvent]);
+    
+    console.log('📤 Sending Purchase event to Meta...');
+    
+    // Send the event
+    const response = await eventRequest.execute();
+    
+    console.log('✅ Meta Purchase event sent successfully!');
+    console.log('📊 Response:', JSON.stringify(response, null, 2));
+    
+    // Mark purchase event as sent in Supabase
+    await db
+      .from('users')
+      .update({ purchase_event_sent: true })
+      .eq('phone_number', userData.phone_number);
+    
+    console.log('✅ User marked as purchase_event_sent = true');
+    
+    return { success: true, response };
+    
+  } catch (error) {
+    console.error('❌ Error sending Meta Purchase event:', error);
+    console.error('Error details:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 // ============================================================================
 // REDIS SETUP FOR CONVERSATION MEMORY
 // ============================================================================
@@ -3117,6 +3237,56 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
       
       await handleSubscriptionCancellation(subscription);
     }
+
+    // Handle successful charge after trial (FIRE META PURCHASE EVENT)
+    else if (event.type === 'charge.succeeded') {
+      const charge = event.data.object;
+      console.log('💳 Charge succeeded:', charge.id);
+      console.log('💰 Amount charged:', charge.amount / 100, charge.currency.toUpperCase());
+      
+      // Only fire Purchase event if this is NOT a $0 charge (i.e., actual payment after trial)
+      if (charge.amount > 0) {
+        console.log('✅ This is a REAL payment (not $0 trial) - firing Meta Purchase event');
+        
+        try {
+          // Get customer ID from charge
+          const customerId = charge.customer;
+          
+          // Find user in Supabase by Stripe customer ID
+          const { data: user, error } = await db
+            .from('users')
+            .select('*')
+            .eq('stripe_customer_id', customerId)
+            .single();
+          
+          if (error || !user) {
+            console.log('❌ User not found for customer ID:', customerId);
+          } else if (user.purchase_event_sent) {
+            console.log('⏭️ Purchase event already sent for this user, skipping');
+          } else {
+            console.log('🎯 User found! Sending Meta Purchase event...');
+            console.log('📊 User:', {
+              email: user.email,
+              phone: user.phone_number,
+              plan: user.trial_plan
+            });
+            
+            // Send Meta Purchase event
+            const result = await sendMetaPurchaseEvent(user, charge);
+            
+            if (result.success) {
+              console.log('✅ Meta Purchase event sent successfully!');
+            } else {
+              console.log('❌ Failed to send Meta Purchase event:', result.error);
+            }
+          }
+        } catch (error) {
+          console.error('❌ Error handling charge.succeeded for Meta tracking:', error);
+        }
+      } else {
+        console.log('⏭️ Skipping Meta Purchase event - this is a $0 charge (trial start)');
+      }
+    }
     
     // Handle subscription trial ending
     else if (event.type === 'customer.subscription.trial_will_end') {
@@ -3163,6 +3333,164 @@ app.post('/test-whatsapp', async (req, res) => {
   } catch (error) {
     console.error('❌ WhatsApp test error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Store Meta tracking data from frontend
+app.post('/store-meta-data', async (req, res) => {
+  console.log('📦 Received Meta tracking data from frontend');
+  
+  try {
+    const { phone_number, email, meta_fbp, meta_fbc, trial_plan } = req.body;
+    
+    console.log('📊 Data received:', {
+      phone_number,
+      email,
+      meta_fbp: meta_fbp ? 'Present' : 'Missing',
+      meta_fbc: meta_fbc ? 'Present' : 'Missing',
+      trial_plan
+    });
+    
+    if (!phone_number) {
+      return res.status(400).json({ 
+        error: 'phone_number is required' 
+      });
+    }
+    
+    // Update user in Supabase with Meta tracking data
+    const { data, error } = await db
+      .from('users')
+      .update({
+        meta_fbp: meta_fbp,
+        meta_fbc: meta_fbc,
+        trial_plan: trial_plan || 'monthly',
+        meta_event_id: `${phone_number}_${Date.now()}` // Unique event ID
+      })
+      .eq('phone_number', phone_number)
+      .select();
+    
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      return res.status(500).json({ 
+        error: 'Failed to store Meta tracking data',
+        details: error.message 
+      });
+    }
+    
+    if (!data || data.length === 0) {
+      console.log('⚠️ User not found with phone:', phone_number);
+      return res.status(404).json({ 
+        error: 'User not found',
+        phone_number 
+      });
+    }
+    
+    console.log('✅ Meta tracking data stored successfully for:', phone_number);
+    
+    res.json({ 
+      success: true,
+      message: 'Meta tracking data stored successfully',
+      user: {
+        phone_number: data[0].phone_number,
+        email: data[0].email,
+        trial_plan: data[0].trial_plan
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error storing Meta tracking data:', error);
+    res.status(500).json({ 
+      error: error.message 
+    });
+  }
+});
+
+// Test endpoint to manually trigger Meta Purchase event
+app.post('/test-meta-purchase', async (req, res) => {
+  console.log('🧪 Manual Meta Purchase event test triggered');
+  
+  try {
+    const { phone_number } = req.body;
+    
+    if (!phone_number) {
+      return res.status(400).json({ 
+        error: 'phone_number is required',
+        example: { phone_number: '+96170123456' }
+      });
+    }
+    
+    console.log('📞 Looking for user with phone:', phone_number);
+    
+    // Find user in Supabase
+    const { data: user, error } = await db
+      .from('users')
+      .select('*')
+      .eq('phone_number', phone_number)
+      .single();
+    
+    if (error || !user) {
+      console.log('❌ User not found');
+      return res.status(404).json({ 
+        error: 'User not found',
+        phone_number: phone_number
+      });
+    }
+    
+    console.log('✅ User found:', {
+      email: user.email,
+      phone: user.phone_number,
+      plan: user.trial_plan,
+      purchase_event_sent: user.purchase_event_sent
+    });
+    
+    if (user.purchase_event_sent) {
+      console.log('⚠️ Purchase event already sent for this user');
+      return res.json({
+        success: true,
+        message: 'Purchase event was already sent for this user',
+        already_sent: true,
+        user: {
+          email: user.email,
+          phone: user.phone_number,
+          plan: user.trial_plan
+        }
+      });
+    }
+    
+    // Send Meta Purchase event
+    console.log('🎯 Sending Meta Purchase event...');
+    const result = await sendMetaPurchaseEvent(user, {
+      amount: user.trial_plan === 'yearly' ? 5988 : 1999,
+      currency: 'usd',
+      id: 'test_charge_' + Date.now()
+    });
+    
+    if (result.success) {
+      console.log('✅ Meta Purchase event sent successfully!');
+      res.json({
+        success: true,
+        message: 'Meta Purchase event sent successfully',
+        user: {
+          email: user.email,
+          phone: user.phone_number,
+          plan: user.trial_plan
+        },
+        meta_response: result.response
+      });
+    } else {
+      console.log('❌ Failed to send Meta Purchase event');
+      res.status(500).json({
+        success: false,
+        error: result.error
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Test endpoint error:', error);
+    res.status(500).json({ 
+      error: error.message,
+      stack: error.stack
+    });
   }
 });
 
