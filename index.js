@@ -273,8 +273,8 @@ const updateUserSession = async (phone, sessionData) => {
     const sessionKey = `user_session:${phone}`;
     
     // ENFORCE 10-MESSAGE ROLLING WINDOW (extended from 5 for better context)
-    if (sessionData.conversationHistory && sessionData.conversationHistory.length > 10) {
-      sessionData.conversationHistory = sessionData.conversationHistory.slice(-10);
+    if (sessionData.conversationHistory && sessionData.conversationHistory.length > 20) {
+      sessionData.conversationHistory = sessionData.conversationHistory.slice(-20);
       console.log('✂️ Trimmed conversation history to last 10 messages');
     }
     
