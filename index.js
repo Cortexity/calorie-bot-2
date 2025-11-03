@@ -128,12 +128,21 @@ const sendMetaPurchaseEvent = async (userData, stripeData) => {
     console.log('📊 Response:', JSON.stringify(response, null, 2));
     
     // Mark purchase event as sent in Supabase
-    await db
+    console.log('📝 Updating Supabase: Setting purchase_event_sent = true for phone:', userData.phone_number);
+    
+    const { data: updateResult, error: updateError } = await db
       .from('users')
       .update({ purchase_event_sent: true })
-      .eq('phone_number', userData.phone_number);
+      .eq('phone_number', userData.phone_number)
+      .select();
     
-    console.log('✅ User marked as purchase_event_sent = true');
+    if (updateError) {
+      console.error('❌ Failed to update purchase_event_sent in Supabase:', updateError);
+      console.error('❌ Error details:', updateError.message);
+    } else {
+      console.log('✅ User marked as purchase_event_sent = true');
+      console.log('✅ Updated user data:', updateResult);
+    }
     
     return { success: true, response };
     
@@ -2934,9 +2943,9 @@ app.post('/create-checkout-session', async (req, res) => {
         },
       ],
       mode: 'subscription',
-      subscription_data: {
-        trial_period_days: 3
-      },
+      
+      // NO TRIAL - charge immediately for testing
+
       success_url: `https://www.iqcalorie.com/confirmation?session_id={CHECKOUT_SESSION_ID}&checkout_key=${checkoutKey}`,
       cancel_url: 'https://www.iqcalorie.com/choose-your-plan',
       
@@ -3254,16 +3263,21 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
     // Handle successful charge after trial (FIRE META PURCHASE EVENT)
     else if (event.type === 'charge.succeeded') {
       const charge = event.data.object;
-      console.log('💳 Charge succeeded:', charge.id);
-      console.log('💰 Amount charged:', charge.amount / 100, charge.currency.toUpperCase());
+      console.log('💳 CHARGE.SUCCEEDED EVENT RECEIVED');
+      console.log('📋 Charge ID:', charge.id);
+      console.log('💰 Amount:', charge.amount, '(in cents)');
+      console.log('💰 Amount in dollars:', charge.amount / 100, charge.currency.toUpperCase());
+      console.log('👤 Customer ID:', charge.customer);
+      console.log('🔍 Full charge object:', JSON.stringify(charge, null, 2));
       
       // Only fire Purchase event if this is NOT a $0 charge (i.e., actual payment after trial)
       if (charge.amount > 0) {
-        console.log('✅ This is a REAL payment (not $0 trial) - firing Meta Purchase event');
+        console.log('✅ This is a REAL payment (amount > 0) - proceeding with Meta Purchase event');
         
         try {
           // Get customer ID from charge
           const customerId = charge.customer;
+          console.log('🔍 Searching for user with Stripe customer ID:', customerId);
           
           // Find user in Supabase by Stripe customer ID
           const { data: user, error } = await db
@@ -3272,32 +3286,67 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
             .eq('stripe_customer_id', customerId)
             .single();
           
+          console.log('📊 Supabase query result:', {
+            found: !!user,
+            error: error?.message || 'none',
+            userPhone: user?.phone_number || 'N/A',
+            purchaseEventSent: user?.purchase_event_sent || false
+          });
+          
           if (error || !user) {
             console.log('❌ User not found for customer ID:', customerId);
+            console.log('❌ Supabase error:', error);
+            console.log('⚠️ THIS IS THE PROBLEM - User lookup failed');
           } else if (user.purchase_event_sent) {
-            console.log('⏭️ Purchase event already sent for this user, skipping');
+            console.log('⭐️ Purchase event already sent for this user, skipping');
+            console.log('📊 User details:', {
+              phone: user.phone_number,
+              email: user.email,
+              purchase_event_sent: user.purchase_event_sent
+            });
           } else {
-            console.log('🎯 User found! Sending Meta Purchase event...');
-            console.log('📊 User:', {
+            console.log('🎯 User found! Proceeding to send Meta Purchase event...');
+            console.log('📊 User details:', {
               email: user.email,
               phone: user.phone_number,
-              plan: user.trial_plan
+              plan: user.trial_plan,
+              purchase_event_sent: user.purchase_event_sent,
+              meta_fbp: user.meta_fbp || 'not set',
+              meta_fbc: user.meta_fbc || 'not set',
+              meta_event_id: user.meta_event_id || 'not set'
             });
+            
+            console.log('🚀 Calling sendMetaPurchaseEvent function...');
             
             // Send Meta Purchase event
             const result = await sendMetaPurchaseEvent(user, charge);
             
+            console.log('📥 Result from sendMetaPurchaseEvent:', result);
+            
             if (result.success) {
               console.log('✅ Meta Purchase event sent successfully!');
+              console.log('✅ purchase_event_sent should now be TRUE in Supabase');
+              
+              // Verify the update
+              const { data: verifyUser } = await db
+                .from('users')
+                .select('purchase_event_sent')
+                .eq('phone_number', user.phone_number)
+                .single();
+              
+              console.log('🔍 Verification check - purchase_event_sent is now:', verifyUser?.purchase_event_sent);
+              
             } else {
               console.log('❌ Failed to send Meta Purchase event:', result.error);
             }
           }
         } catch (error) {
           console.error('❌ Error handling charge.succeeded for Meta tracking:', error);
+          console.error('❌ Error stack:', error.stack);
         }
       } else {
-        console.log('⏭️ Skipping Meta Purchase event - this is a $0 charge (trial start)');
+        console.log('⭐️ Skipping Meta Purchase event - this is a $0 charge (trial start)');
+        console.log('💡 When you remove trial_period_days, the FIRST charge will be > 0 and trigger the Purchase event');
       }
     }
     
