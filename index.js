@@ -3270,7 +3270,8 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
       console.log('💰 Amount:', charge.amount, '(in cents)');
       console.log('💰 Amount in dollars:', charge.amount / 100, charge.currency.toUpperCase());
       console.log('👤 Customer ID:', charge.customer);
-      console.log('🔍 Full charge object:', JSON.stringify(charge, null, 2));
+      console.log('📧 Email:', charge.billing_details?.email || 'N/A');
+      console.log('💳 Payment method:', charge.payment_method_details?.type || 'N/A');
       
       // Only fire Purchase event if this is NOT a $0 charge (i.e., actual payment after trial)
       if (charge.amount > 0) {
