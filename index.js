@@ -128,20 +128,16 @@ const sendMetaPurchaseEvent = async (userData, stripeData) => {
     console.log('📊 Response:', JSON.stringify(response, null, 2));
     
     // Mark purchase event as sent in Supabase
-    console.log('📝 Updating Supabase: Setting purchase_event_sent = true for phone:', userData.phone_number);
-    
-    const { data: updateResult, error: updateError } = await db
+    const { error: updateError } = await db
       .from('users')
       .update({ purchase_event_sent: true })
       .eq('phone_number', userData.phone_number)
       .select();
     
     if (updateError) {
-      console.error('❌ Failed to update purchase_event_sent in Supabase:', updateError);
-      console.error('❌ Error details:', updateError.message);
+      console.error('❌ Failed to update purchase_event_sent:', updateError);
     } else {
       console.log('✅ User marked as purchase_event_sent = true');
-      console.log('✅ Updated user data:', updateResult);
     }
     
     return { success: true, response };
@@ -2944,7 +2940,7 @@ app.post('/create-checkout-session', async (req, res) => {
       ],
       mode: 'subscription',
       
-      // NO TRIAL - charge immediately for testing
+    //No trial, immediate purchase.
 
       success_url: `https://www.iqcalorie.com/confirmation?session_id={CHECKOUT_SESSION_ID}&checkout_key=${checkoutKey}`,
       cancel_url: 'https://www.iqcalorie.com/choose-your-plan',
@@ -3263,28 +3259,18 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
     // Handle successful charge after trial (FIRE META PURCHASE EVENT)
     else if (event.type === 'charge.succeeded') {
       const charge = event.data.object;
-      console.log('💳 ========================================');
-      console.log('💳 CHARGE.SUCCEEDED EVENT RECEIVED');
-      console.log('💳 ========================================');
-      console.log('📋 Charge ID:', charge.id);
-      console.log('💰 Amount:', charge.amount, '(in cents)');
-      console.log('💰 Amount in dollars:', charge.amount / 100, charge.currency.toUpperCase());
-      console.log('👤 Customer ID:', charge.customer);
-      console.log('📧 Email:', charge.billing_details?.email || 'N/A');
-      console.log('💳 Payment method:', charge.payment_method_details?.type || 'N/A');
+      console.log('💳 Charge succeeded:', charge.id);
+      console.log('💰 Amount charged:', charge.amount / 100, charge.currency.toUpperCase());
       
       // Only fire Purchase event if this is NOT a $0 charge (i.e., actual payment after trial)
       if (charge.amount > 0) {
-        console.log('✅ ========================================');
-        console.log('✅ REAL PAYMENT DETECTED - PROCEEDING WITH META PURCHASE EVENT');
-        console.log('✅ ========================================');
+        console.log('✅ This is a REAL payment (not $0 trial) - firing Meta Purchase event');
         
         try {
           // Get customer ID from charge
           const customerId = charge.customer;
-          console.log('🔍 Step 1: Searching for user with Stripe customer ID:', customerId);
           
-          // RETRY LOGIC: Try up to 5 times with increasing delays
+          // RETRY LOGIC: User creation might take a few seconds
           let user = null;
           let error = null;
           let attempts = 0;
@@ -3293,14 +3279,10 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
           while (attempts < maxAttempts && !user) {
             attempts++;
             
-            if (attempts > 1) {
-              const waitTime = attempts * 2000; // 2s, 4s, 6s, 8s, 10s
-              console.log(`⏳ Attempt ${attempts}/${maxAttempts}: Waiting ${waitTime/1000} seconds before retry...`);
-              await new Promise(resolve => setTimeout(resolve, waitTime));
-            } else {
-              console.log('⏳ Attempt 1: Waiting 3 seconds to ensure user is created in Supabase...');
-              await new Promise(resolve => setTimeout(resolve, 3000));
-            }
+            // Wait before each attempt (3s, 5s, 7s, 9s, 11s)
+            const waitTime = 1000 + (attempts * 2000);
+            console.log(`⏳ Attempt ${attempts}/${maxAttempts}: Waiting ${waitTime/1000}s for user creation...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
             
             // Find user in Supabase by Stripe customer ID
             const result = await db
@@ -3313,104 +3295,32 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
             error = result.error;
             
             if (user) {
-              console.log(`✅ User found on attempt ${attempts}!`);
+              console.log(`✅ User found on attempt ${attempts}`);
               break;
-            } else {
-              console.log(`⚠️ Attempt ${attempts}: User not found yet...`);
             }
           }
           
-          console.log('📊 Step 2: Supabase query result:', {
-            found: !!user,
-            error: error?.message || 'none',
-            userPhone: user?.phone_number || 'N/A',
-            purchaseEventSent: user?.purchase_event_sent || false
-          });
-          
           if (error || !user) {
-            console.log('❌ ========================================');
-            console.log('❌ USER NOT FOUND - THIS IS THE PROBLEM!');
-            console.log('❌ ========================================');
-            console.log('❌ Customer ID searched:', customerId);
-            console.log('❌ Supabase error:', error);
-            console.log('💡 Possible causes:');
-            console.log('   1. User not yet created in Supabase');
-            console.log('   2. Customer ID mismatch');
-            console.log('   3. Database connection issue');
+            console.log('❌ User not found after', maxAttempts, 'attempts. Customer ID:', customerId);
           } else if (user.purchase_event_sent) {
-            console.log('⭐️ ========================================');
-            console.log('⭐️ PURCHASE EVENT ALREADY SENT - SKIPPING');
-            console.log('⭐️ ========================================');
-            console.log('📊 User details:', {
-              phone: user.phone_number,
-              email: user.email,
-              purchase_event_sent: user.purchase_event_sent
-            });
+            console.log('⏭️ Purchase event already sent for this user, skipping');
           } else {
-            console.log('🎯 ========================================');
-            console.log('🎯 USER FOUND - SENDING META PURCHASE EVENT');
-            console.log('🎯 ========================================');
-            console.log('📊 User details:', {
-              email: user.email,
-              phone: user.phone_number,
-              plan: user.trial_plan,
-              purchase_event_sent: user.purchase_event_sent,
-              meta_fbp: user.meta_fbp || 'not set',
-              meta_fbc: user.meta_fbc || 'not set',
-              meta_event_id: user.meta_event_id || 'not set'
-            });
-            
-            console.log('🚀 Step 3: Calling sendMetaPurchaseEvent function...');
+            console.log('🎯 Sending Meta Purchase event...');
             
             // Send Meta Purchase event
             const result = await sendMetaPurchaseEvent(user, charge);
             
-            console.log('📥 Step 4: Result from sendMetaPurchaseEvent:', JSON.stringify(result, null, 2));
-            
             if (result.success) {
-              console.log('✅ ========================================');
-              console.log('✅ META PURCHASE EVENT SENT SUCCESSFULLY!');
-              console.log('✅ ========================================');
-              console.log('✅ purchase_event_sent should now be TRUE in Supabase');
-              
-              // Verify the update
-              const { data: verifyUser, error: verifyError } = await db
-                .from('users')
-                .select('purchase_event_sent')
-                .eq('phone_number', user.phone_number)
-                .single();
-              
-              if (verifyError) {
-                console.log('❌ Verification check failed:', verifyError);
-              } else {
-                console.log('🔍 Verification check - purchase_event_sent is now:', verifyUser?.purchase_event_sent);
-                
-                if (verifyUser?.purchase_event_sent === true) {
-                  console.log('✅ ✅ ✅ CONFIRMED: Database updated successfully!');
-                } else {
-                  console.log('❌ ❌ ❌ WARNING: Database shows FALSE but should be TRUE!');
-                }
-              }
-              
+              console.log('✅ Meta Purchase event sent successfully!');
             } else {
-              console.log('❌ ========================================');
-              console.log('❌ FAILED TO SEND META PURCHASE EVENT');
-              console.log('❌ ========================================');
-              console.log('❌ Error:', result.error);
+              console.log('❌ Failed to send Meta Purchase event:', result.error);
             }
           }
         } catch (error) {
-          console.error('❌ ========================================');
-          console.error('❌ EXCEPTION IN CHARGE.SUCCEEDED HANDLER');
-          console.error('❌ ========================================');
-          console.error('❌ Error message:', error.message);
-          console.error('❌ Error stack:', error.stack);
+          console.error('❌ Error handling charge.succeeded for Meta tracking:', error);
         }
       } else {
-        console.log('⭐️ ========================================');
-        console.log('⭐️ SKIPPING - $0 CHARGE (TRIAL START)');
-        console.log('⭐️ ========================================');
-        console.log('💡 When you remove trial_period_days, the FIRST charge will be > 0 and trigger the Purchase event');
+        console.log('⏭️ Skipping Meta Purchase event - this is a $0 charge (trial start)');
       }
     }
     
