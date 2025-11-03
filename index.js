@@ -3284,16 +3284,41 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
           const customerId = charge.customer;
           console.log('🔍 Step 1: Searching for user with Stripe customer ID:', customerId);
           
-          // Add a small delay to ensure user creation is complete
-          console.log('⏳ Waiting 2 seconds to ensure user is created in Supabase...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          // RETRY LOGIC: Try up to 5 times with increasing delays
+          let user = null;
+          let error = null;
+          let attempts = 0;
+          const maxAttempts = 5;
           
-          // Find user in Supabase by Stripe customer ID
-          const { data: user, error } = await db
-            .from('users')
-            .select('*')
-            .eq('stripe_customer_id', customerId)
-            .single();
+          while (attempts < maxAttempts && !user) {
+            attempts++;
+            
+            if (attempts > 1) {
+              const waitTime = attempts * 2000; // 2s, 4s, 6s, 8s, 10s
+              console.log(`⏳ Attempt ${attempts}/${maxAttempts}: Waiting ${waitTime/1000} seconds before retry...`);
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+            } else {
+              console.log('⏳ Attempt 1: Waiting 3 seconds to ensure user is created in Supabase...');
+              await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+            
+            // Find user in Supabase by Stripe customer ID
+            const result = await db
+              .from('users')
+              .select('*')
+              .eq('stripe_customer_id', customerId)
+              .single();
+            
+            user = result.data;
+            error = result.error;
+            
+            if (user) {
+              console.log(`✅ User found on attempt ${attempts}!`);
+              break;
+            } else {
+              console.log(`⚠️ Attempt ${attempts}: User not found yet...`);
+            }
+          }
           
           console.log('📊 Step 2: Supabase query result:', {
             found: !!user,
