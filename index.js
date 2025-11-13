@@ -91,16 +91,38 @@ const sendMetaPurchaseEvent = async (userData, stripeData) => {
       metaUserData.setFbc(userData.meta_fbc);
     }
 
-    // Add User Agent for better device/browser matching
+        // Add User Agent for better device/browser matching
     if (userData.user_agent) {
-      metaUserData.setClientUserAgent(userData.user_agent);
-      console.log('🖥️ User Agent added to Meta event');
+      try {
+        metaUserData.setClientUserAgent(userData.user_agent);
+        console.log('🖥️ User Agent added to Meta event:', userData.user_agent.substring(0, 60) + '...');
+      } catch (error) {
+        console.error('❌ Failed to set User Agent:', error.message);
+        // Try alternative method name
+        try {
+          metaUserData.client_user_agent = userData.user_agent;
+          console.log('🖥️ User Agent set via direct property');
+        } catch (e) {
+          console.error('❌ All User Agent methods failed');
+        }
+      }
     }
 
-    // Add IP Address for better location matching
+    // Add IP Address for better location matching  
     if (userData.user_ip) {
-      metaUserData.setClientIpAddress(userData.user_ip);
-      console.log('🌐 IP Address added to Meta event');
+      try {
+        metaUserData.setClientIpAddress(userData.user_ip);
+        console.log('🌐 IP Address added to Meta event:', userData.user_ip);
+      } catch (error) {
+        console.error('❌ Failed to set IP Address:', error.message);
+        // Try alternative method name
+        try {
+          metaUserData.client_ip_address = userData.user_ip;
+          console.log('🌐 IP Address set via direct property');
+        } catch (e) {
+          console.error('❌ All IP Address methods failed');
+        }
+      }
     }
 
     // Create custom data (purchase details)
@@ -130,6 +152,16 @@ const sendMetaPurchaseEvent = async (userData, stripeData) => {
     // Create event request
     const eventRequest = new EventRequest(metaAccessToken, metaPixelId)
       .setEvents([serverEvent]);
+    
+    // Debug: Log the exact UserData being sent
+    console.log('🔍 DEBUG: UserData object being sent to Meta:', {
+      email: userData.email ? 'Present' : 'Missing',
+      phone: userData.phone_number ? 'Present' : 'Missing',
+      fbp: userData.meta_fbp ? 'Present' : 'Missing',
+      fbc: userData.meta_fbc ? 'Present' : 'Missing',
+      user_agent: userData.user_agent ? userData.user_agent.substring(0, 50) + '...' : 'Missing',
+      user_ip: userData.user_ip ? userData.user_ip : 'Missing'
+    });
     
     console.log('📤 Sending Purchase event to Meta...');
     
