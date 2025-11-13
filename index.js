@@ -2353,11 +2353,37 @@ app.post('/complete-user-setup', async (req, res) => {
   try {
     const { checkoutKey, sessionId, stripeData, userData } = req.body;
     
+    // ============================================================================
+    // 🔍 DEBUG: CHECK WHERE USER_AGENT AND USER_IP ARE COMING FROM
+    // ============================================================================
+    console.log('');
+    console.log('🔍 ========== DEBUG: IP & USER AGENT INVESTIGATION ==========');
+    console.log('');
+    console.log('1️⃣ FROM REQUEST BODY (userData):');
+    console.log('   - userData.user_agent:', userData?.user_agent || 'NOT PRESENT');
+    console.log('   - userData.user_ip:', userData?.user_ip || 'NOT PRESENT');
+    console.log('');
+    console.log('2️⃣ FROM REQUEST HEADERS:');
+    console.log('   - req.headers["user-agent"]:', req.headers['user-agent'] || 'NOT PRESENT');
+    console.log('   - req.headers["x-forwarded-for"]:', req.headers['x-forwarded-for'] || 'NOT PRESENT');
+    console.log('   - req.headers["x-real-ip"]:', req.headers['x-real-ip'] || 'NOT PRESENT');
+    console.log('');
+    console.log('3️⃣ FROM REQUEST OBJECT:');
+    console.log('   - req.ip:', req.ip || 'NOT PRESENT');
+    console.log('   - req.connection.remoteAddress:', req.connection?.remoteAddress || 'NOT PRESENT');
+    console.log('   - req.socket.remoteAddress:', req.socket?.remoteAddress || 'NOT PRESENT');
+    console.log('');
+    console.log('4️⃣ ALL REQUEST HEADERS:');
+    console.log(JSON.stringify(req.headers, null, 2));
+    console.log('');
+    console.log('🔍 ========== END DEBUG ==========');
+    console.log('');
+    // ============================================================================
+    
     console.log('📦 Received data:');
     console.log('  - checkoutKey:', checkoutKey);
     console.log('  - sessionId:', sessionId);
-    console.log('  - userData:', userData);
-    console.log('🔍 NEW FIELDS DEBUG:');
+    console.log('  - userData:', userData);    console.log('🔍 NEW FIELDS DEBUG:');
     console.log('  - target_weight_kg:', userData?.target_weight_kg);
     console.log('  - fitness_goal:', userData?.fitness_goal);
     console.log('  - measurement_system:', userData?.measurement_system);
