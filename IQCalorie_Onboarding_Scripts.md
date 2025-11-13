@@ -3782,20 +3782,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             try {
-                // Get Meta tracking data from localStorage (stored by header script)
-                const meta_fbp = localStorage.getItem('meta_fbp') || null;
-                const meta_fbc = localStorage.getItem('meta_fbc') || null;
-                const selectedPlan = localStorage.getItem('selectedPlan') || 'monthly';
-                
-                // Generate unique event ID for this signup
-                const meta_event_id = `signup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                
-                console.log('📊 Meta data retrieved:', {
-                    meta_fbp: meta_fbp ? 'Present' : 'Missing',
-                    meta_fbc: meta_fbc ? 'Present' : 'Missing',
-                    meta_event_id: meta_event_id,
-                    trial_plan: selectedPlan
-                });
+    // Get Meta tracking data from localStorage (stored by header script)
+    const meta_fbp = localStorage.getItem('meta_fbp') || null;
+    const meta_fbc = localStorage.getItem('meta_fbc') || null;
+    const selectedPlan = localStorage.getItem('selectedPlan') || 'monthly';
+    
+    // Get User Agent and IP Address from localStorage
+    const user_agent = localStorage.getItem('user_agent') || null;
+    const user_ip = localStorage.getItem('user_ip') || null;
+    
+    // Generate unique event ID for this signup
+    const meta_event_id = `signup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    console.log('📊 Meta data retrieved:', {
+        meta_fbp: meta_fbp ? 'Present' : 'Missing',
+        meta_fbc: meta_fbc ? 'Present' : 'Missing',
+        meta_event_id: meta_event_id,
+        trial_plan: selectedPlan,
+        user_agent: user_agent ? 'Present' : 'Missing',
+        user_ip: user_ip ? 'Present' : 'Missing'
+    });
                 
                 const requestData = {
                     checkoutKey: checkoutKey,
@@ -3829,10 +3835,13 @@ document.addEventListener('DOMContentLoaded', function() {
     weekly_weight_goal: userData.supabaseData.weekly_weight_goal || null,
     
     // META TRACKING DATA
-    meta_fbp: meta_fbp,
-    meta_fbc: meta_fbc,
-    meta_event_id: meta_event_id,
-    trial_plan: selectedPlan
+    // META TRACKING DATA
+        meta_fbp: meta_fbp,
+        meta_fbc: meta_fbc,
+        meta_event_id: meta_event_id,
+        trial_plan: selectedPlan,
+        user_agent: user_agent,
+        user_ip: user_ip
                     }
                 };
 
@@ -4053,6 +4062,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
 })();
 </script>
+
 
 
 
