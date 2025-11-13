@@ -3782,6 +3782,21 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             try {
+                // Get Meta tracking data from localStorage (stored by header script)
+                const meta_fbp = localStorage.getItem('meta_fbp') || null;
+                const meta_fbc = localStorage.getItem('meta_fbc') || null;
+                const selectedPlan = localStorage.getItem('selectedPlan') || 'monthly';
+                
+                // Generate unique event ID for this signup
+                const meta_event_id = `signup_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                
+                console.log('📊 Meta data retrieved:', {
+                    meta_fbp: meta_fbp ? 'Present' : 'Missing',
+                    meta_fbc: meta_fbc ? 'Present' : 'Missing',
+                    meta_event_id: meta_event_id,
+                    trial_plan: selectedPlan
+                });
+                
                 const requestData = {
                     checkoutKey: checkoutKey,
                     sessionId: sessionId,
@@ -3811,7 +3826,13 @@ document.addEventListener('DOMContentLoaded', function() {
     measurement_system: userData.supabaseData.measurement_system || null,
     diet_preference: userData.supabaseData.diet_preference || null,
     diet_preference_custom: userData.supabaseData.diet_preference_custom || null,
-    weekly_weight_goal: userData.supabaseData.weekly_weight_goal || null
+    weekly_weight_goal: userData.supabaseData.weekly_weight_goal || null,
+    
+    // META TRACKING DATA
+    meta_fbp: meta_fbp,
+    meta_fbc: meta_fbc,
+    meta_event_id: meta_event_id,
+    trial_plan: selectedPlan
                     }
                 };
 
@@ -3824,6 +3845,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log("?? Sending POST request to:", backendUrl);
 
                 // Make the actual request
+                console.log("🔧 About to send request to:", backendUrl);
+                console.log("🔧 Request body:", JSON.stringify(requestData, null, 2));
+                
                 const response = await fetch(backendUrl, {
                     method: 'POST',
                     headers: {
@@ -3832,13 +3856,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     body: JSON.stringify(requestData)
                 });
 
-                console.log("?? Response received:");
+                console.log("🔧 Response received:");
                 console.log("  - Status:", response.status);
                 console.log("  - StatusText:", response.statusText);
                 console.log("  - OK?", response.ok);
+                console.log("  - URL that was called:", response.url);
 
                 const result = await response.json();
-                console.log("?? Response JSON:", result);
+                console.log("🔧 Response JSON:", result);
 
                 if (response.ok) {
                     console.log("? User account created successfully:", result);
@@ -4031,6 +4056,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 
+
+
 <!-- Insert HEADER script for Confirmation -->
 <script>
 const urlParams = new URLSearchParams(window.location.search);
@@ -4142,33 +4169,17 @@ fbq('track', 'PageView');
     console.log('📞 User phone:', userPhone);
     console.log('📧 User email:', userEmail);
     
-    // Send Meta tracking data to backend to store in Supabase
-    if (userPhone) {
-        console.log('📤 Sending Meta tracking data to backend...');
-        
-        fetch('https://calorie-bot-2-production-73cb.up.railway.app/store-meta-data', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                phone_number: userPhone,
-                email: userEmail,
-                meta_fbp: metaData.fbp,
-                meta_fbc: metaData.fbc,
-                trial_plan: selectedPlan || 'monthly'
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            console.log('✅ Meta tracking data sent to backend:', data);
-        })
-        .catch(error => {
-            console.error('❌ Error sending Meta tracking data:', error);
-        });
-    } else {
-        console.log('⚠️ No phone number found - cannot store Meta tracking data');
-    }
+    // Store Meta tracking data in localStorage to be included in user setup
+    console.log('💾 Storing Meta tracking data in localStorage...');
+    
+    localStorage.setItem('meta_fbp', metaData.fbp || '');
+    localStorage.setItem('meta_fbc', metaData.fbc || '');
+    
+    console.log('✅ Meta tracking data stored in localStorage:', {
+        fbp: metaData.fbp || 'Not found',
+        fbc: metaData.fbc || 'Not found',
+        plan: selectedPlan || 'monthly (default)'
+    });
     
 })();
 

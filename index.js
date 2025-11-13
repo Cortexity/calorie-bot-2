@@ -82,15 +82,27 @@ const sendMetaPurchaseEvent = async (userData, stripeData) => {
       metaUserData.setPhone(cleanPhone);
     }
     
-    // Add Facebook browser/click IDs if available (for better attribution)
+        // Add Facebook browser/click IDs if available (for better attribution)
     if (userData.meta_fbp) {
       metaUserData.setFbp(userData.meta_fbp);
     }
-    
+
     if (userData.meta_fbc) {
       metaUserData.setFbc(userData.meta_fbc);
     }
-    
+
+    // Add User Agent for better device/browser matching
+    if (userData.user_agent) {
+      metaUserData.setClientUserAgent(userData.user_agent);
+      console.log('🖥️ User Agent added to Meta event');
+    }
+
+    // Add IP Address for better location matching
+    if (userData.user_ip) {
+      metaUserData.setClientIpAddress(userData.user_ip);
+      console.log('🌐 IP Address added to Meta event');
+    }
+
     // Create custom data (purchase details)
     const customData = new CustomData()
       .setContentName(plan.name)
@@ -2466,7 +2478,9 @@ app.post('/complete-user-setup', async (req, res) => {
       meta_fbc: userData?.meta_fbc || null,
       meta_event_id: userData?.meta_event_id || null,
       trial_plan: userData?.trial_plan || 'monthly',
-      
+      user_agent: userData?.user_agent || null,
+      user_ip: userData?.user_ip || null,
+
       // Timestamp
       created_at: new Date().toISOString()
     };
@@ -2475,7 +2489,9 @@ app.post('/complete-user-setup', async (req, res) => {
       meta_fbp: finalUserData.meta_fbp ? 'Present' : 'Missing',
       meta_fbc: finalUserData.meta_fbc ? 'Present' : 'Missing',
       meta_event_id: finalUserData.meta_event_id ? 'Present' : 'Missing',
-      trial_plan: finalUserData.trial_plan
+      trial_plan: finalUserData.trial_plan,
+      user_agent: finalUserData.user_agent ? 'Present' : 'Missing',
+      user_ip: finalUserData.user_ip ? 'Present' : 'Missing'
     });
     
     console.log('🎯 Final user data for Supabase:', finalUserData);
@@ -2939,9 +2955,7 @@ app.post('/create-checkout-session', async (req, res) => {
         },
       ],
       mode: 'subscription',
-      subscription_data: {
-        trial_period_days: 1
-      },
+      // No trial, immediate purchase for testing.
 
       success_url: `https://www.iqcalorie.com/confirmation?session_id={CHECKOUT_SESSION_ID}&checkout_key=${checkoutKey}`,
       cancel_url: 'https://www.iqcalorie.com/choose-your-plan',
