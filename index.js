@@ -2661,12 +2661,9 @@ app.post('/complete-user-setup', async (req, res) => {
     
     console.log('🎯 Final user data for Supabase:', finalUserData);
     
-    // STEP 4: Insert into Supabase
+    // STEP 4: Insert into Supabase (strict - will fail if phone already exists)
     const { data, error } = await db.from('users')
-      .upsert(finalUserData, { 
-        onConflict: 'phone_number',
-        returning: 'representation' 
-      })
+      .insert(finalUserData)
       .select();
     
     if (error) {
