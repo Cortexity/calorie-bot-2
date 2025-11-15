@@ -2561,7 +2561,7 @@ app.post('/complete-user-setup', async (req, res) => {
         return res.status(400).json({
           success: false,
           error: 'duplicate_phone',
-          message: 'This phone number is already registered. Your payment has been refunded. Please use a different phone number or contact support at support@iqcalorie.com.',
+          message: 'This phone number is already registered. Your payment has been refunded. Please use a different phone number or contact support for help.',
           phone: finalPhoneNumber,
           refunded: true
         });
