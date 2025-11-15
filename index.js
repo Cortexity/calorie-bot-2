@@ -2460,23 +2460,130 @@ app.post('/complete-user-setup', async (req, res) => {
       stripeSubscriptionId = stripe_subscription_id || 'unknown';
       
       console.log('🔍 FINAL DATA CHECK:');
-      console.log('  - Phone:', finalPhoneNumber || 'NOT FOUND');
-      console.log('  - Email:', finalEmail || 'NOT FOUND');
-      console.log('  - First Name:', finalFirstName || 'NOT FOUND');
-      console.log('  - Last Name:', finalLastName || 'NOT FOUND');
-      console.log('  - Customer ID:', stripeCustomerId);
-      console.log('  - Subscription ID:', stripeSubscriptionId);
-      
-    } catch (stripeError) {
-      console.error('❌ Error fetching Stripe session:', stripeError);
-      return res.status(500).json({ 
-        error: 'Failed to retrieve payment information',
-        details: stripeError.message 
-      });
-    }
+    console.log('  - Phone:', finalPhoneNumber || 'NOT FOUND');
+    console.log('  - Email:', finalEmail || 'NOT FOUND');
+    console.log('  - First Name:', finalFirstName || 'NOT FOUND');
+    console.log('  - Last Name:', finalLastName || 'NOT FOUND');
+    console.log('  - Customer ID:', stripeCustomerId);
+    console.log('  - Subscription ID:', stripeSubscriptionId);
     
-    // STEP 2: Handle missing phone scenario
-    if (!finalPhoneNumber) {
+  } catch (stripeError) {
+    console.error('❌ Error fetching Stripe session:', stripeError);
+    return res.status(500).json({ 
+      error: 'Failed to retrieve payment information',
+      details: stripeError.message 
+    });
+  }
+  
+  // ============================================================================
+  // DUPLICATE PHONE CHECK - Search Stripe's customer database
+  // ============================================================================
+  
+  if (finalPhoneNumber && !finalPhoneNumber.startsWith('email:') && !finalPhoneNumber.startsWith('stripe:')) {
+    console.log('');
+    console.log('🔍 ========== DUPLICATE PHONE CHECK ==========');
+    console.log('🔍 Searching Stripe for phone:', finalPhoneNumber);
+    
+    try {
+      // Search ALL Stripe customers for this phone number
+      const existingCustomers = await stripe.customers.search({
+        query: `phone:'${finalPhoneNumber}'`,
+      });
+      
+      console.log('📊 Total customers found with this phone:', existingCustomers.data.length);
+      
+      // Filter out the current customer (the one who just signed up)
+      const duplicateCustomers = existingCustomers.data.filter(
+        customer => customer.id !== stripeCustomerId
+      );
+      
+      if (duplicateCustomers.length > 0) {
+        console.log('❌ DUPLICATE PHONE DETECTED!');
+        console.log('   - Phone number:', finalPhoneNumber);
+        console.log('   - Existing customer(s):', duplicateCustomers.map(c => c.id).join(', '));
+        console.log('   - Current customer:', stripeCustomerId);
+        console.log('');
+        console.log('🗑️  Starting cleanup process...');
+        
+        // STEP 1: Cancel the subscription immediately
+        if (stripeSubscriptionId && stripeSubscriptionId !== 'unknown') {
+          try {
+            await stripe.subscriptions.cancel(stripeSubscriptionId);
+            console.log('✅ Subscription cancelled:', stripeSubscriptionId);
+          } catch (cancelError) {
+            console.error('⚠️  Error cancelling subscription:', cancelError.message);
+          }
+        }
+        
+        // STEP 2: Check if there was a charge and refund it
+        try {
+          const charges = await stripe.charges.list({
+            customer: stripeCustomerId,
+            limit: 1
+          });
+          
+          if (charges.data.length > 0) {
+            const charge = charges.data[0];
+            
+            if (charge.amount > 0 && charge.status === 'succeeded') {
+              // Issue full refund
+              const refund = await stripe.refunds.create({
+                charge: charge.id,
+                reason: 'duplicate'
+              });
+              
+              console.log('💰 Refund issued:');
+              console.log('   - Amount:', charge.amount / 100, charge.currency.toUpperCase());
+              console.log('   - Charge ID:', charge.id);
+              console.log('   - Refund ID:', refund.id);
+            } else {
+              console.log('ℹ️  No charge to refund (trial period or $0 charge)');
+            }
+          }
+        } catch (refundError) {
+          console.error('⚠️  Error processing refund:', refundError.message);
+        }
+        
+        // STEP 3: Delete the duplicate customer from Stripe
+        try {
+          await stripe.customers.del(stripeCustomerId);
+          console.log('✅ Duplicate customer deleted from Stripe:', stripeCustomerId);
+        } catch (deleteError) {
+          console.error('⚠️  Error deleting customer:', deleteError.message);
+        }
+        
+        console.log('');
+        console.log('✅ Cleanup complete - returning error to frontend');
+        console.log('========== END DUPLICATE CHECK ==========');
+        console.log('');
+        
+        // Return error to frontend
+        return res.status(400).json({
+          success: false,
+          error: 'duplicate_phone',
+          message: 'This phone number is already registered. Your payment has been refunded. Please use a different phone number or contact support at support@iqcalorie.com.',
+          phone: finalPhoneNumber,
+          refunded: true
+        });
+      } else {
+        console.log('✅ No duplicate found - phone number is unique');
+        console.log('========== END DUPLICATE CHECK ==========');
+        console.log('');
+      }
+      
+    } catch (searchError) {
+      console.error('⚠️  Error searching for duplicates:', searchError.message);
+      console.log('⚠️  Continuing with user creation despite search error...');
+      console.log('========== END DUPLICATE CHECK ==========');
+      console.log('');
+      // Continue with user creation even if search fails
+    }
+  } else {
+    console.log('ℹ️  Skipping duplicate check (no valid phone number)');
+  }
+  
+  // STEP 2: Handle missing phone scenario
+  if (!finalPhoneNumber) {
       console.log('⚠️ WARNING: No phone number found in Stripe or userData');
       console.log('🔧 Will use email-based identifier instead');
       
