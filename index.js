@@ -2493,32 +2493,42 @@ app.post('/complete-user-setup', async (req, res) => {
       console.log('📊 Total customers found with this phone:', existingCustomers.data.length);
       
       // Filter out:
-      // 1. The current customer (the one who just signed up)
-      // 2. Deleted customers (they don't have subscriptions anymore)
-      const duplicateCustomers = existingCustomers.data.filter(
-        customer => {
-          // Exclude current customer
-          if (customer.id === stripeCustomerId) {
-            return false;
-          }
-          
-          // Exclude deleted customers (Stripe marks them as deleted)
-          if (customer.deleted === true) {
-            console.log('   ℹ️  Ignoring deleted customer:', customer.id);
-            return false;
-          }
-          
-          // This is a real duplicate
-          return true;
+      // 1. The current customer (the one who just signed up)  
+      // 2. Customers with NO active subscriptions (old cancelled/deleted accounts)
+      const activeDuplicates = [];
+      
+      for (const customer of existingCustomers.data) {
+        // Skip current customer
+        if (customer.id === stripeCustomerId) {
+          console.log('   ℹ️  Skipping current customer:', customer.id);
+          continue;
         }
-      );
+        
+        // Check if this customer has any active subscriptions
+        try {
+          const subscriptions = await stripe.subscriptions.list({
+            customer: customer.id,
+            status: 'active',
+            limit: 1
+          });
+          
+          if (subscriptions.data.length > 0) {
+            console.log('   ⚠️  Found ACTIVE duplicate customer:', customer.id);
+            activeDuplicates.push(customer);
+          } else {
+            console.log('   ℹ️  Ignoring inactive customer:', customer.id);
+          }
+        } catch (subError) {
+          console.log('   ℹ️  Could not check subscriptions for:', customer.id);
+        }
+      }
       
-      console.log('📊 Active duplicate customers (after filtering deleted):', duplicateCustomers.length);
+      console.log('📊 Active duplicate customers with subscriptions:', activeDuplicates.length);
       
-      if (duplicateCustomers.length > 0) {
+      if (activeDuplicates.length > 0) {
         console.log('❌ DUPLICATE PHONE DETECTED!');
         console.log('   - Phone number:', finalPhoneNumber);
-        console.log('   - Existing customer(s):', duplicateCustomers.map(c => c.id).join(', '));
+        console.log('   - Existing customer(s):', activeDuplicates.map(c => c.id).join(', '));
         console.log('   - Current customer:', stripeCustomerId);
         console.log('');
         console.log('🗑️  Starting cleanup process...');
