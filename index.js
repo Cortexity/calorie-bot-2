@@ -2492,10 +2492,28 @@ app.post('/complete-user-setup', async (req, res) => {
       
       console.log('📊 Total customers found with this phone:', existingCustomers.data.length);
       
-      // Filter out the current customer (the one who just signed up)
+      // Filter out:
+      // 1. The current customer (the one who just signed up)
+      // 2. Deleted customers (they don't have subscriptions anymore)
       const duplicateCustomers = existingCustomers.data.filter(
-        customer => customer.id !== stripeCustomerId
+        customer => {
+          // Exclude current customer
+          if (customer.id === stripeCustomerId) {
+            return false;
+          }
+          
+          // Exclude deleted customers (Stripe marks them as deleted)
+          if (customer.deleted === true) {
+            console.log('   ℹ️  Ignoring deleted customer:', customer.id);
+            return false;
+          }
+          
+          // This is a real duplicate
+          return true;
+        }
       );
+      
+      console.log('📊 Active duplicate customers (after filtering deleted):', duplicateCustomers.length);
       
       if (duplicateCustomers.length > 0) {
         console.log('❌ DUPLICATE PHONE DETECTED!');
