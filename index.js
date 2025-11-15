@@ -2479,6 +2479,7 @@ app.post('/complete-user-setup', async (req, res) => {
   // DUPLICATE PHONE CHECK - Search Stripe's customer database
   // ============================================================================
   
+  
   if (finalPhoneNumber && !finalPhoneNumber.startsWith('email:') && !finalPhoneNumber.startsWith('stripe:')) {
     console.log('');
     console.log('🔍 ========== DUPLICATE PHONE CHECK ==========');
