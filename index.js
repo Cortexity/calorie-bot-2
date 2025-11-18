@@ -3146,7 +3146,9 @@ app.post('/create-checkout-session', async (req, res) => {
         },
       ],
       mode: 'subscription',
-      // No trial, immediate purchase for testing.
+      subscription_data: {
+        trial_period_days: 3
+      },
 
       success_url: `https://www.iqcalorie.com/confirmation?session_id={CHECKOUT_SESSION_ID}&checkout_key=${checkoutKey}`,
       cancel_url: 'https://www.iqcalorie.com/choose-your-plan',
