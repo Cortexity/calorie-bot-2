@@ -3479,6 +3479,7 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
             const invoiceDiscount = subscription.latest_invoice.discounts[0];
             
             if (invoiceDiscount && invoiceDiscount.coupon) {
+              // Get the coupon ID - this should be MO100 or YR100
               couponCode = invoiceDiscount.coupon.id;
               couponUsed = true;
               
@@ -3489,6 +3490,9 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
               console.log('💰 Discount:', percentOff ? `${percentOff}% off` : `$${amountOff / 100} off`);
               console.log('📅 Duration:', invoiceDiscount.coupon.duration);
               console.log('ℹ️ This is a "once" coupon - applied to first invoice only');
+              
+              // DEBUG: Log the entire discount object to see what's available
+              console.log('🔍 DEBUG - Full discount object:', JSON.stringify(invoiceDiscount, null, 2));
             }
           } else {
             console.log('ℹ️ No coupon found on subscription or invoice');
@@ -3519,14 +3523,14 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
         
         console.log('🎯 STRIPE USER DATA READY FOR SUPABASE:', stripeUserData);
         
-        // If coupon was used, update customer description to show it prominently
-        if (couponUsed && couponCode && session.customer) {
+        // If coupon was used, update SUBSCRIPTION description to show it prominently
+        if (couponUsed && couponCode && session.subscription) {
           try {
-            console.log('📝 Updating customer description with coupon info...');
+            console.log('📝 Updating subscription description with coupon info...');
             
-            // Get current customer to preserve any existing description
-            const customer = await stripe.customers.retrieve(session.customer);
-            const existingDescription = customer.description || '';
+            // Get current subscription to preserve any existing description
+            const subscription = await stripe.subscriptions.retrieve(session.subscription);
+            const existingDescription = subscription.description || '';
             
             // Create new description with coupon badge
             const couponBadge = `🎟️ PROMO: ${couponCode}`;
@@ -3534,13 +3538,13 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
               ? `${couponBadge} | ${existingDescription}` 
               : couponBadge;
             
-            await stripe.customers.update(session.customer, {
+            await stripe.subscriptions.update(session.subscription, {
               description: newDescription
             });
             
-            console.log('✅ Customer description updated:', newDescription);
+            console.log('✅ Subscription description updated:', newDescription);
           } catch (descError) {
-            console.error('❌ Error updating customer description:', descError);
+            console.error('❌ Error updating subscription description:', descError);
           }
         }
       }
