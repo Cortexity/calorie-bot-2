@@ -1,4 +1,4 @@
-# IQCalorie – ClickFunnels Onboarding Scripts
+# IQCalorie ClickFunnels Onboarding Scripts
 
 Each section below corresponds to a page in the ClickFunnels onboarding flow. Insert your footer script for each page under the appropriate section.
 
@@ -12,12 +12,12 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
 (function() {
     "use strict";
     
-    console.log("📱 Final phone capture script loaded");
+    console.log("ðŸ“± Final phone capture script loaded");
     
     let phoneAlreadyCaptured = false;
     
     function getSelectedCountryCode() {
-        console.log("🔍 Getting selected country code...");
+        console.log("ðŸ” Getting selected country code...");
         
         // Method 1: Try ITI library first (most reliable)
         const phoneInput = document.querySelector('input[type="tel"]');
@@ -28,19 +28,19 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
                     const countryData = iti.getSelectedCountryData();
                     if (countryData && countryData.dialCode) {
                         const code = '+' + countryData.dialCode;
-                        console.log("🎯 ITI detected country code:", code);
+                        console.log("ðŸŽ¯ ITI detected country code:", code);
                         return code;
                     }
                 }
             } catch (e) {
-                console.log("⚠️ ITI method failed:", e.message);
+                console.log("âš ï¸ ITI method failed:", e.message);
             }
         }
         
         // Method 2: Check for visible country flags and map to dial codes
         const selectedFlag = document.querySelector('.iti__selected-flag');
         if (selectedFlag) {
-            console.log("✅ Found selected flag element");
+            console.log("âœ… Found selected flag element");
             
             // Map flag classes to dial codes
             const flagToDialCode = {
@@ -106,7 +106,7 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
                 const flagElement = selectedFlag.querySelector('.' + flagClass);
                 if (flagElement && flagElement.offsetWidth > 0) {
                     const dialCode = flagToDialCode[flagClass];
-                    console.log(`🎯 Found visible flag ${flagClass}, mapped to: ${dialCode}`);
+                    console.log(`ðŸŽ¯ Found visible flag ${flagClass}, mapped to: ${dialCode}`);
                     return dialCode;
                 }
             }
@@ -122,7 +122,7 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
             if (dialCodeEl.offsetWidth > 0 && dialCodeEl.offsetHeight > 0) {
                 const isInDropdown = dialCodeEl.closest('.iti__country-list');
                 if (!isInDropdown) {
-                    console.log("🎯 Found visible dial code outside dropdown:", dialCodeText);
+                    console.log("ðŸŽ¯ Found visible dial code outside dropdown:", dialCodeText);
                     return dialCodeText;
                 }
             }
@@ -132,12 +132,12 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
         if (phoneInput && phoneInput.value.trim().startsWith('+')) {
             const match = phoneInput.value.trim().match(/^(\+\d{1,4})/);
             if (match) {
-                console.log("🎯 Found country code in input value:", match[1]);
+                console.log("ðŸŽ¯ Found country code in input value:", match[1]);
                 return match[1];
             }
         }
         
-        console.log("❌ Could not detect country code, using Lebanon fallback");
+        console.log("âŒ Could not detect country code, using Lebanon fallback");
         return '+961';
     }
     
@@ -146,10 +146,10 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
             const startTrialBtn = document.querySelector('#startFreeTrialBtn');
             
             if (startTrialBtn) {
-                console.log("✅ Found Start Free Trial button");
+                console.log("âœ… Found Start Free Trial button");
                 
                 startTrialBtn.addEventListener('click', function(e) {
-                    console.log("🚀 START FREE TRIAL CLICKED!");
+                    console.log("ðŸš€ START FREE TRIAL CLICKED!");
 
                     // CAPTURE EMAIL (moved outside phone logic)
                     const emailInput = document.querySelector('input[type="email"]');
@@ -157,13 +157,13 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
 
                     if (emailValue) {
                         localStorage.setItem('userEmail', emailValue);
-                        console.log("📧 Email stored:", emailValue);
+                        console.log("ðŸ“§ Email stored:", emailValue);
                     } else {
-                        console.log("📧 No email found in form");
+                        console.log("ðŸ“§ No email found in form");
                     }  
 
                     if (phoneAlreadyCaptured) {
-                        console.log("📱 Phone already captured, skipping...");
+                        console.log("ðŸ“± Phone already captured, skipping...");
                         return;
                     }
                     
@@ -175,41 +175,41 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
                         const popup = document.querySelector('.popup, .modal, [class*="popup"], [class*="modal"]');
                         if (popup) {
                             phoneInput = popup.querySelector('input[type="tel"]');
-                            console.log("📱 Looking for phone input in popup:", !!phoneInput);
+                            console.log("ðŸ“± Looking for phone input in popup:", !!phoneInput);
                         }
                     }
                     
                     // Try other selectors
                     if (!phoneInput || !phoneInput.value.trim()) {
                         phoneInput = document.querySelector('input[name*="phone"], input[id*="phone"], input[placeholder*="phone"]');
-                        console.log("📱 Trying alternative phone selectors:", !!phoneInput);
+                        console.log("ðŸ“± Trying alternative phone selectors:", !!phoneInput);
                     }
                     
-                    console.log("📱 Phone input found:", !!phoneInput);
-                    console.log("📱 Phone input value:", phoneInput ? `"${phoneInput.value}"` : "none");
+                    console.log("ðŸ“± Phone input found:", !!phoneInput);
+                    console.log("ðŸ“± Phone input value:", phoneInput ? `"${phoneInput.value}"` : "none");
                     
                     if (phoneInput && phoneInput.value.trim()) {
                         const phoneNumber = phoneInput.value.trim();
-                        console.log("📱 Raw phone input:", phoneNumber);
+                        console.log("ðŸ“± Raw phone input:", phoneNumber);
                         
                         if (phoneNumber.startsWith('+')) {
                             // Phone already has country code
                             const fullPhoneNumber = phoneNumber.replace(/\s+/g, '');
-                            console.log("📱 Phone already has country code:", fullPhoneNumber);
+                            console.log("ðŸ“± Phone already has country code:", fullPhoneNumber);
                             
                             localStorage.setItem('userPhone', fullPhoneNumber);
                             phoneAlreadyCaptured = true;
-                            console.log("💾 STORED:", fullPhoneNumber);
+                            console.log("ðŸ’¾ STORED:", fullPhoneNumber);
                         } else {
                             // Get the selected country code
                             const countryCode = getSelectedCountryCode();
-                            console.log("🌍 Using country code:", countryCode);
+                            console.log("ðŸŒ Using country code:", countryCode);
                             
                             // Clean phone number
                             const cleanPhone = phoneNumber.replace(/^0+/, '').replace(/\s+/g, '');
                             const fullPhoneNumber = countryCode + cleanPhone;
                             
-                            console.log("🔧 Building phone number:");
+                            console.log("ðŸ”§ Building phone number:");
                             console.log("  Original:", phoneNumber);
                             console.log("  Country code:", countryCode);
                             console.log("  Cleaned:", cleanPhone);
@@ -217,13 +217,13 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
                             
                             localStorage.setItem('userPhone', fullPhoneNumber);
                             phoneAlreadyCaptured = true;
-                            console.log("💾 STORED:", fullPhoneNumber);
+                            console.log("ðŸ’¾ STORED:", fullPhoneNumber);
                         }
                     } else {
-                        console.log("❌ No phone value found");
+                        console.log("âŒ No phone value found");
                         
                         // Debug: Show all input fields to help identify the issue
-                        console.log("🔍 DEBUG: All input fields on page:");
+                        console.log("ðŸ” DEBUG: All input fields on page:");
                         const allInputs = document.querySelectorAll('input');
                         allInputs.forEach((input, i) => {
                             console.log(`  ${i + 1}. Type: ${input.type}, Value: "${input.value}", Name: "${input.name}", ID: "${input.id}", Placeholder: "${input.placeholder}"`);
@@ -233,13 +233,13 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
                         const phonePattern = /^[\d\s\-\+\(\)]+$/;
                         allInputs.forEach((input, i) => {
                             if (input.value && phonePattern.test(input.value) && input.value.length >= 8) {
-                                console.log(`🎯 Found potential phone in input ${i + 1}:`, input.value);
+                                console.log(`ðŸŽ¯ Found potential phone in input ${i + 1}:`, input.value);
                             }
                         });
                     }
                 });
             } else {
-                console.log("❌ Start Free Trial button not found");
+                console.log("âŒ Start Free Trial button not found");
             }
         }, 2000);
     }
@@ -249,7 +249,7 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
         document.addEventListener('submit', function(e) {
             const form = e.target;
             if (form && form.tagName === 'FORM' && !phoneAlreadyCaptured) {
-                console.log("📝 Form submitted, capturing phone number...");
+                console.log("ðŸ“ Form submitted, capturing phone number...");
                 
                 const phoneField = form.querySelector('input[type="tel"]');
                 if (phoneField && phoneField.value.trim()) {
@@ -259,7 +259,7 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
                     
                     localStorage.setItem('userPhone', fullPhoneNumber);
                     phoneAlreadyCaptured = true;
-                    console.log("💾 STORED from form:", fullPhoneNumber);
+                    console.log("ðŸ’¾ STORED from form:", fullPhoneNumber);
                 }
             }
         });
@@ -278,7 +278,7 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
     
     // Test functions
     window.testCountryCodeFinal = function() {
-        console.log("🧪 Testing final country code detection:");
+        console.log("ðŸ§ª Testing final country code detection:");
         const code = getSelectedCountryCode();
         console.log("Result:", code);
         return code;
@@ -287,10 +287,10 @@ Each section below corresponds to a page in the ClickFunnels onboarding flow. In
     window.clearPhoneCapture = function() {
         localStorage.removeItem('userPhone');
         phoneAlreadyCaptured = false;
-        console.log("🗑️ Phone capture cleared");
+        console.log("ðŸ—‘ï¸ Phone capture cleared");
     };
     
-    console.log("🧪 Final test functions available:");
+    console.log("ðŸ§ª Final test functions available:");
     console.log("  window.testCountryCodeFinal() - Test detection");
     console.log("  window.clearPhoneCapture() - Clear stored phone");
     
@@ -560,7 +560,7 @@ if (window.heightValidationLoaded) {
     
     // Enhanced enable/disable functions for ALL buttons
     function enableButton() {
-      console.log("🟢 ENABLING BUTTONS:", buttonsToStyle.map(b => b.type));
+      console.log("ðŸŸ¢ ENABLING BUTTONS:", buttonsToStyle.map(b => b.type));
       
       buttonsToStyle.forEach(({btn, type}) => {
         btn.style.opacity = "1";
@@ -573,12 +573,12 @@ if (window.heightValidationLoaded) {
         btn.style.filter = "none";
         btn.style.setProperty("opacity", "1", "important");
         
-        console.log(`  ✅ ${type} button enabled`);
+        console.log(`  âœ… ${type} button enabled`);
       });
     }
     
     function disableButton() {
-      console.log("🔴 DISABLING BUTTONS:", buttonsToStyle.map(b => b.type));
+      console.log("ðŸ”´ DISABLING BUTTONS:", buttonsToStyle.map(b => b.type));
       
       buttonsToStyle.forEach(({btn, type}) => {
         btn.style.opacity = "0.5";
@@ -590,7 +590,7 @@ if (window.heightValidationLoaded) {
         btn.style.filter = "none"; // Remove grayscale to keep orange color
         btn.style.setProperty("opacity", "0.5", "important");
         
-        console.log(`  ❌ ${type} button disabled`);
+        console.log(`  âŒ ${type} button disabled`);
       });
     }
     
@@ -672,7 +672,7 @@ if (window.heightValidationLoaded) {
         console.log("Setting up imperial validation");
         
         function checkImperialHeight() {
-          console.log("🔥 IMPERIAL VALIDATION FUNCTION START 🔥");
+          console.log("ðŸ”¥ IMPERIAL VALIDATION FUNCTION START ðŸ”¥");
           console.log("Input variables:");
           console.log("  - currentFeetValue (string):", `"${currentFeetValue}"`);
           console.log("  - currentInchValue (string):", `"${currentInchValue}"`);
@@ -701,17 +701,17 @@ if (window.heightValidationLoaded) {
           console.log("  - overallValid:", overallValid, `(${feetValid} && ${inchValid} && ${totalValid})`);
           
           if (isEmpty) {
-            console.log("🟡 EMPTY FIELDS - Disabling button, hiding error");
+            console.log("ðŸŸ¡ EMPTY FIELDS - Disabling button, hiding error");
             disableButton();
             if (errorMsg) {
               errorMsg.style.display = "none";
-              console.log("   ✅ Error message hidden");
+              console.log("   âœ… Error message hidden");
             }
             return;
           }
           
           if (overallValid) {
-            console.log("🟢 VALID HEIGHT - Enabling button, hiding error");
+            console.log("ðŸŸ¢ VALID HEIGHT - Enabling button, hiding error");
             console.log(`   Valid: ${feet}ft ${inches}in = ${totalInches} total inches`);
             enableButton();
             
@@ -721,30 +721,30 @@ if (window.heightValidationLoaded) {
             
             if (errorMsg) {
               errorMsg.style.display = "none";
-              console.log("   ✅ Error message hidden");
+              console.log("   âœ… Error message hidden");
             }
           } else {
-            console.log("🔴 INVALID HEIGHT - Disabling button, will show error after delay");
+            console.log("ðŸ”´ INVALID HEIGHT - Disabling button, will show error after delay");
             console.log(`   Invalid: ${feet}ft ${inches}in = ${totalInches} total inches`);
             console.log(`   Failed checks: feet(${feetValid}), inches(${inchValid}), total(${totalValid})`);
             disableButton();
             validationTimeout = setTimeout(() => {
-              console.log("⏰ TIMEOUT REACHED - Showing error message");
+              console.log("â° TIMEOUT REACHED - Showing error message");
               if (currentFeetValue.trim() !== '' || currentInchValue.trim() !== '') {
                 if (errorMsg) {
                   errorMsg.style.display = "block";
-                  console.log("   💀 Error message displayed");
+                  console.log("   ðŸ’€ Error message displayed");
                 } else {
-                  console.log("   ❌ Error message element not found!");
+                  console.log("   âŒ Error message element not found!");
                 }
               }
             }, 800);
           }
-          console.log("🔥 IMPERIAL VALIDATION FUNCTION END 🔥\n");
+          console.log("ðŸ”¥ IMPERIAL VALIDATION FUNCTION END ðŸ”¥\n");
         }
         
         feetInput.addEventListener("input", (event) => {
-          console.log("🚨 FEET INPUT DEBUG START 🚨");
+          console.log("ðŸš¨ FEET INPUT DEBUG START ðŸš¨");
           console.log("Raw event.target.value:", `"${event.target.value}"`);
           
           clearTimeout(validationTimeout);
@@ -767,13 +767,13 @@ if (window.heightValidationLoaded) {
           console.log("  - currentInchValue:", `"${currentInchValue}"`);
           
           setTimeout(() => {
-            console.log("🚨 CALLING checkImperialHeight from FEET input 🚨");
+            console.log("ðŸš¨ CALLING checkImperialHeight from FEET input ðŸš¨");
             checkImperialHeight();
           }, 10);
         });
         
         inchInput.addEventListener("input", (event) => {
-          console.log("🚨 INCH INPUT DEBUG START 🚨");
+          console.log("ðŸš¨ INCH INPUT DEBUG START ðŸš¨");
           console.log("Raw event.target.value:", `"${event.target.value}"`);
           
           clearTimeout(validationTimeout);
@@ -796,7 +796,7 @@ if (window.heightValidationLoaded) {
           console.log("  - currentInchValue:", `"${currentInchValue}"`);
           
           setTimeout(() => {
-            console.log("🚨 CALLING checkImperialHeight from INCH input 🚨");
+            console.log("ðŸš¨ CALLING checkImperialHeight from INCH input ðŸš¨");
             checkImperialHeight();
           }, 10);
         });
@@ -898,7 +898,7 @@ if (window.weightValidationLoaded) {Sto
     
     // Enhanced enable/disable functions for ALL buttons
     function enableButton() {
-      console.log("🟢 ENABLING BUTTONS:", buttonsToStyle.map(b => b.type));
+      console.log("ðŸŸ¢ ENABLING BUTTONS:", buttonsToStyle.map(b => b.type));
       
       buttonsToStyle.forEach(({btn, type}) => {
         btn.style.opacity = "1";
@@ -911,12 +911,12 @@ if (window.weightValidationLoaded) {Sto
         btn.style.filter = "none";
         btn.style.setProperty("opacity", "1", "important");
         
-        console.log(`  ✅ ${type} button enabled`);
+        console.log(`  âœ… ${type} button enabled`);
       });
     }
     
     function disableButton() {
-      console.log("🔴 DISABLING BUTTONS:", buttonsToStyle.map(b => b.type));
+      console.log("ðŸ”´ DISABLING BUTTONS:", buttonsToStyle.map(b => b.type));
       
       buttonsToStyle.forEach(({btn, type}) => {
         btn.style.opacity = "0.5";
@@ -928,7 +928,7 @@ if (window.weightValidationLoaded) {Sto
         btn.style.filter = "none"; // Remove grayscale to keep orange color
         btn.style.setProperty("opacity", "0.5", "important");
         
-        console.log(`  ❌ ${type} button disabled`);
+        console.log(`  âŒ ${type} button disabled`);
       });
     }
     
@@ -1115,7 +1115,7 @@ if (window.ageValidationLoaded) {
     
     // Enhanced enable/disable functions for ALL buttons
     function enableButton() {
-      console.log("🟢 ENABLING BUTTONS:", buttonsToStyle.map(b => b.type));
+      console.log("ðŸŸ¢ ENABLING BUTTONS:", buttonsToStyle.map(b => b.type));
       
       buttonsToStyle.forEach(({btn, type}) => {
         btn.style.opacity = "1";
@@ -1128,12 +1128,12 @@ if (window.ageValidationLoaded) {
         btn.style.filter = "none";
         btn.style.setProperty("opacity", "1", "important");
         
-        console.log(`  ✅ ${type} button enabled`);
+        console.log(`  âœ… ${type} button enabled`);
       });
     }
     
     function disableButton() {
-      console.log("🔴 DISABLING BUTTONS:", buttonsToStyle.map(b => b.type));
+      console.log("ðŸ”´ DISABLING BUTTONS:", buttonsToStyle.map(b => b.type));
       
       buttonsToStyle.forEach(({btn, type}) => {
         btn.style.opacity = "0.5";
@@ -1145,7 +1145,7 @@ if (window.ageValidationLoaded) {
         btn.style.filter = "none"; // Remove grayscale to keep orange color
         btn.style.setProperty("opacity", "0.5", "important");
         
-        console.log(`  ❌ ${type} button disabled`);
+        console.log(`  âŒ ${type} button disabled`);
       });
     }
     
@@ -1553,7 +1553,7 @@ if (urlParams.get('preview') === 'true') {
 <script>
 // TDEE Calculation Script
 document.addEventListener("DOMContentLoaded", function() {
-    console.log("🔥 STARTING TDEE CALCULATION 🔥");
+    console.log("ðŸ”¥ STARTING TDEE CALCULATION ðŸ”¥");
     
     // Get all stored user data
     let userData = {
@@ -1566,7 +1566,7 @@ document.addEventListener("DOMContentLoaded", function() {
         measurementSystem: localStorage.getItem('preferredSystem') || 'metric'
     };
     
-    console.log('📊 USER DATA COLLECTED:');
+    console.log('ðŸ“Š USER DATA COLLECTED:');
     console.log('  - Gender:', userData.gender);
     console.log('  - Age:', userData.age);
     console.log('  - Height:', userData.height);
@@ -1580,7 +1580,7 @@ document.addEventListener("DOMContentLoaded", function() {
     let weightKg = userData.weight;
     
     if (userData.measurementSystem === 'imperial') {
-        console.log('🔄 CONVERTING IMPERIAL TO METRIC:');
+        console.log('ðŸ”„ CONVERTING IMPERIAL TO METRIC:');
         console.log('  - Height (inches):', userData.height);
         console.log('  - Weight (lbs):', userData.weight);
         
@@ -1597,12 +1597,12 @@ document.addEventListener("DOMContentLoaded", function() {
     let bmr;
     if (userData.gender === 'male') {
         bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * userData.age) + 5;
-        console.log('⚡ BMR CALCULATION (MALE):');
-        console.log(`  BMR = (10 × ${weightKg}) + (6.25 × ${heightCm}) - (5 × ${userData.age}) + 5`);
+        console.log('âš¡ BMR CALCULATION (MALE):');
+        console.log(`  BMR = (10 Ã— ${weightKg}) + (6.25 Ã— ${heightCm}) - (5 Ã— ${userData.age}) + 5`);
     } else {
         bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * userData.age) - 161;
-        console.log('⚡ BMR CALCULATION (FEMALE):');
-        console.log(`  BMR = (10 × ${weightKg}) + (6.25 × ${heightCm}) - (5 × ${userData.age}) - 161`);
+        console.log('âš¡ BMR CALCULATION (FEMALE):');
+        console.log(`  BMR = (10 Ã— ${weightKg}) + (6.25 Ã— ${heightCm}) - (5 Ã— ${userData.age}) - 161`);
     }
     
     console.log('  BMR Result:', bmr);
@@ -1620,11 +1620,11 @@ document.addEventListener("DOMContentLoaded", function() {
     const multiplier = activityMultipliers[userData.activityLevel] || 1.55;
     const tdee = Math.round(bmr * multiplier);
     
-    console.log('🏃 TDEE CALCULATION:');
+    console.log('ðŸƒ TDEE CALCULATION:');
     console.log('  - Activity Level:', userData.activityLevel);
     console.log('  - Multiplier:', multiplier);
-    console.log('  - TDEE = BMR × Multiplier');
-    console.log(`  - TDEE = ${bmr} × ${multiplier} = ${tdee}`);
+    console.log('  - TDEE = BMR Ã— Multiplier');
+    console.log(`  - TDEE = ${bmr} Ã— ${multiplier} = ${tdee}`);
     
     // Display TDEE on page (both desktop and mobile)
     const tdeeDisplayDesktop = document.querySelector('#tdee-result');
@@ -1632,20 +1632,20 @@ document.addEventListener("DOMContentLoaded", function() {
     
     if (tdeeDisplayDesktop) {
         tdeeDisplayDesktop.textContent = tdee;
-        console.log('✅ TDEE DISPLAYED ON DESKTOP:', tdee);
+        console.log('âœ… TDEE DISPLAYED ON DESKTOP:', tdee);
     } else {
-        console.log('⚠️ Desktop #tdee-result element not found');
+        console.log('âš ï¸ Desktop #tdee-result element not found');
     }
     
     if (tdeeDisplayMobile) {
         tdeeDisplayMobile.textContent = tdee;
-        console.log('✅ TDEE DISPLAYED ON MOBILE:', tdee);
+        console.log('âœ… TDEE DISPLAYED ON MOBILE:', tdee);
     } else {
-        console.log('⚠️ Mobile #tdee-result-mob element not found');
+        console.log('âš ï¸ Mobile #tdee-result-mob element not found');
     }
     
     if (!tdeeDisplayDesktop && !tdeeDisplayMobile) {
-        console.log('❌ ERROR: Could not find any TDEE display elements');
+        console.log('âŒ ERROR: Could not find any TDEE display elements');
         console.log('   Make sure you added id="tdee-result" and id="tdee-result-mob"');
     }
     
@@ -1663,9 +1663,9 @@ document.addEventListener("DOMContentLoaded", function() {
     
     localStorage.setItem('userProfile', JSON.stringify(completeProfile));
     
-    console.log('💾 COMPLETE PROFILE STORED:');
+    console.log('ðŸ’¾ COMPLETE PROFILE STORED:');
     console.log(completeProfile);
-    console.log('🎉 TDEE CALCULATION COMPLETE! 🎉');
+    console.log('ðŸŽ‰ TDEE CALCULATION COMPLETE! ðŸŽ‰');
 });
 </script>
 ---
@@ -2479,7 +2479,7 @@ if (urlParams.get('preview') === 'true') {
     console.log("Weekly Results page script loading...");
 
     function initWeeklyResults() {
-        console.log("🔥 WEEKLY RESULTS PAGE LOGIC START 🔥");
+        console.log("ðŸ”¥ WEEKLY RESULTS PAGE LOGIC START ðŸ”¥");
         
         // Get stored user preferences with fallbacks
         var fitnessGoal, measurementSystem;
@@ -2498,18 +2498,18 @@ if (urlParams.get('preview') === 'true') {
         
         // Step 1: Check if this page should be shown at all
         if (fitnessGoal === 'maintain_build') {
-            console.log('❌ User selected "Maintain Weight" - redirecting away from this page');
+            console.log('âŒ User selected "Maintain Weight" - redirecting away from this page');
             window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/preferred-diet";
             return;
         }
         
         if (fitnessGoal !== 'lose_weight' && fitnessGoal !== 'gain_weight') {
-            console.log('⚠️ No valid fitness goal found - redirecting to fitness goal page');
+            console.log('âš ï¸ No valid fitness goal found - redirecting to fitness goal page');
             window.location.href = "https://josephselwansteamwo4bf45.myclickfunnels.com/primary-fitness-goal";
             return;
         }
         
-        console.log('✅ Page should be shown - user goal is:', fitnessGoal);
+        console.log('âœ… Page should be shown - user goal is:', fitnessGoal);
         
         // Step 2: Get all elements using reliable method
         function getAllElements() {
@@ -2552,7 +2552,7 @@ if (urlParams.get('preview') === 'true') {
         
         // Step 3: Hide all elements initially
         function hideAllElements() {
-            console.log('🔒 Hiding all headlines and buttons');
+            console.log('ðŸ”’ Hiding all headlines and buttons');
             
             // Hide headlines
             if (elements.headlineLoss) elements.headlineLoss.style.display = 'none';
@@ -2566,15 +2566,15 @@ if (urlParams.get('preview') === 'true') {
         
         // Step 4: Show only relevant elements
         function showRelevantElements() {
-            console.log('🎯 Showing elements for:', { fitnessGoal: fitnessGoal, measurementSystem: measurementSystem });
+            console.log('ðŸŽ¯ Showing elements for:', { fitnessGoal: fitnessGoal, measurementSystem: measurementSystem });
             
             // Show appropriate headline
             if (fitnessGoal === 'lose_weight' && elements.headlineLoss) {
                 elements.headlineLoss.style.display = 'block';
-                console.log('✅ Showing loss headline');
+                console.log('âœ… Showing loss headline');
             } else if (fitnessGoal === 'gain_weight' && elements.headlineGain) {
                 elements.headlineGain.style.display = 'block';
-                console.log('✅ Showing gain headline');
+                console.log('âœ… Showing gain headline');
             }
             
             // Determine which buttons to show
@@ -2583,18 +2583,18 @@ if (urlParams.get('preview') === 'true') {
             if (measurementSystem === 'imperial') {
                 if (fitnessGoal === 'lose_weight') {
                     buttonsToShow = ['-0.5lbs', '-1lbs', '-1.5lbs', '-2lbs'];
-                    console.log('📊 Showing imperial loss buttons');
+                    console.log('ðŸ“Š Showing imperial loss buttons');
                 } else if (fitnessGoal === 'gain_weight') {
                     buttonsToShow = ['+0.5lbs', '+1lbs', '+1.5lbs', '+2lbs'];
-                    console.log('📊 Showing imperial gain buttons');
+                    console.log('ðŸ“Š Showing imperial gain buttons');
                 }
             } else if (measurementSystem === 'metric') {
                 if (fitnessGoal === 'lose_weight') {
                     buttonsToShow = ['-0.25kg', '-0.5kg', '-0.75kg', '-1kg'];
-                    console.log('📊 Showing metric loss buttons');
+                    console.log('ðŸ“Š Showing metric loss buttons');
                 } else if (fitnessGoal === 'gain_weight') {
                     buttonsToShow = ['+0.25kg', '+0.5kg', '+0.75kg', '+1kg'];
-                    console.log('📊 Showing metric gain buttons');
+                    console.log('ðŸ“Š Showing metric gain buttons');
                 }
             }
             
@@ -2602,16 +2602,16 @@ if (urlParams.get('preview') === 'true') {
             buttonsToShow.forEach(function(buttonId) {
                 if (elements.buttons[buttonId]) {
                     elements.buttons[buttonId].style.display = 'block';
-                    console.log('  ✅ Showing button:', buttonId);
+                    console.log('  âœ… Showing button:', buttonId);
                 } else {
-                    console.log('  ⚠️ Button not found:', buttonId);
+                    console.log('  âš ï¸ Button not found:', buttonId);
                 }
             });
         }
         
         // Step 5: Add click handlers
         function addClickHandlers() {
-            console.log('🖱️ Adding click handlers to buttons');
+            console.log('ðŸ–±ï¸ Adding click handlers to buttons');
             
             Object.entries(elements.buttons).forEach(function(entry) {
                 var buttonId = entry[0];
@@ -2655,7 +2655,7 @@ if (urlParams.get('preview') === 'true') {
                           try {
                               const currentFitnessGoal = localStorage.getItem('fitnessGoal');
                               if (currentFitnessGoal === 'maintain_build') {
-                                  console.log('⚠️ Maintain build user - not storing weekly weight goal');
+                                  console.log('âš ï¸ Maintain build user - not storing weekly weight goal');
                                   localStorage.removeItem('weeklyWeightGoal'); // Clear any existing value
                               } else {
                                   localStorage.setItem('weeklyWeightGoal', buttonId);
@@ -2682,7 +2682,7 @@ if (urlParams.get('preview') === 'true') {
         showRelevantElements();
         addClickHandlers();
         
-        console.log('🎉 WEEKLY RESULTS PAGE LOGIC COMPLETE! 🎉');
+        console.log('ðŸŽ‰ WEEKLY RESULTS PAGE LOGIC COMPLETE! ðŸŽ‰');
     }
     
     // Run when DOM is ready
@@ -3209,8 +3209,8 @@ window.ensureDataCompilation = ensureDataCompilation;
     const STRIPE_CONFIG = {
         publishableKey: "pk_live_51RkLeiEUy9uD09G3oBQUBejzZW6dKRC0UocZnyEuv0KBWZyIu8sPY1R12Hc4oLBcq0aluzQSyuLQIp10vzRxUYXU00JOpHsi97",
         priceIds: {
-            yearly: "price_1Ru9e5EUy9uD09G3KqXCTFpB",
-            monthly: "price_1Ru9ezEUy9uD09G3ik4jyASa"
+            yearly: "price_1RmzECEUy9uD09G3kVF4NIno",
+            monthly: "price_1RmzCOEUy9uD09G3gfpae4fP"
         }
     };
     
@@ -3486,7 +3486,6 @@ async function redirectToCheckout(planType) {
 })();
 </script>
 
-
 <!-- Insert HEADER script for Choose Your Plan -->
 <script>
 const urlParams = new URLSearchParams(window.location.search);
@@ -3507,6 +3506,10 @@ n.queue=[];t=b.createElement(e);t.async=!0;
 t.src=v;s=b.getElementsByTagName(e)[0];
 s.parentNode.insertBefore(t,s)}(window, document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
+
+// Disable ALL automatic event tracking
+fbq('set', 'autoConfig', false, '1625548858408033');  
+  
 fbq('init', '1625548858408033');
 fbq('track', 'PageView');
 
@@ -3835,7 +3838,6 @@ document.addEventListener('DOMContentLoaded', function() {
     weekly_weight_goal: userData.supabaseData.weekly_weight_goal || null,
     
     // META TRACKING DATA
-    // META TRACKING DATA
         meta_fbp: meta_fbp,
         meta_fbc: meta_fbc,
         meta_event_id: meta_event_id,
@@ -3874,8 +3876,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 const result = await response.json();
                 console.log("🔧 Response JSON:", result);
 
+                // Check for duplicate phone error FIRST (before checking response.ok)
+                if (result.error === 'duplicate_phone') {
+                    console.log("⚠️ Duplicate phone detected, returning error object");
+                    return result;
+                }
+
                 if (response.ok) {
-                    console.log("? User account created successfully:", result);
+                    console.log("✅ User account created successfully:", result);
 
                     // Clear localStorage after successful creation
                     const keysToRemove = [
@@ -3885,11 +3893,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     ];
 
                     keysToRemove.forEach(key => localStorage.removeItem(key));
-                    console.log("??? Cleared user data from localStorage");
+                    console.log("🧹 Cleared user data from localStorage");
 
                     return result;
                 } else {
-                    console.error("? Failed to create user account:", result);
+                    console.error("❌ Failed to create user account:", result);
                     return null;
                 }
 
@@ -3941,6 +3949,22 @@ document.addEventListener('DOMContentLoaded', function() {
         // Main execution
         async function initializeUserSetup() {
             console.log("?? Starting automatic user setup...");
+            
+            // ============================================================================
+            // SECURITY: Prevent duplicate execution on page refresh
+            // ============================================================================
+            const urlKey = window.location.search; // Use URL params as unique identifier
+            const setupCompleted = localStorage.getItem('setup_completed_' + urlKey);
+            
+            if (setupCompleted === 'true') {
+                console.log("✅ Setup already completed for this session");
+                console.log("🔒 Preventing duplicate execution (refresh detected)");
+                console.log("ℹ️ User account was already created - skipping to prevent duplicate");
+                return; // Exit immediately
+            }
+            
+            console.log("🆕 First time setup - proceeding with user creation...");
+            // ============================================================================
 
             // Get URL parameters
             let { checkoutKey, sessionId } = getURLParams();
@@ -3992,25 +4016,92 @@ document.addEventListener('DOMContentLoaded', function() {
             // Create user account (backend will handle missing phone)
             const userResult = await createUserAccount(checkoutKey, sessionId, userData, phoneNumber);
 
+            // Check if duplicate phone error
+            if (userResult && userResult.error === 'duplicate_phone') {
+                console.log("❌ DUPLICATE PHONE NUMBER DETECTED");
+                console.log("   - Phone:", userResult.phone);
+                console.log("   - Refunded:", userResult.refunded);
+                
+                // Show error message on page
+                document.body.innerHTML = `
+                    <div style="
+                        max-width: 600px;
+                        margin: 100px auto;
+                        padding: 40px;
+                        text-align: center;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    ">
+                        <div style="font-size: 80px; margin-bottom: 20px;">❌</div>
+                        <h1 style="color: #dc3545; margin-bottom: 20px;">Account Already Exists</h1>
+                        <p style="font-size: 18px; color: #666; margin-bottom: 30px;">
+                            ${userResult.message}
+                        </p>
+                        <div style="
+                            background: #fff3cd;
+                            border: 1px solid #ffc107;
+                            border-radius: 8px;
+                            padding: 20px;
+                            margin-bottom: 30px;
+                        ">
+                            <p style="margin: 0; color: #856404;">
+                                <strong>💰 Your payment has been refunded.</strong><br>
+                                You will see the refund in your account within 5-10 business days.
+                            </p>
+                        </div>
+                        <div style="margin-bottom: 30px;">
+                            <p style="color: #666; margin-bottom: 10px;">
+                                <strong>Phone number:</strong> ${userResult.phone}
+                            </p>
+                        </div>
+                        <div>
+                            <a href="https://www.iqcalorie.com/landing" style="
+                                display: inline-block;
+                                background: #ff6600;
+                                color: white;
+                                padding: 15px 40px;
+                                border-radius: 50px;
+                                text-decoration: none;
+                                font-weight: bold;
+                            ">Try Again with Different Number</a>
+                        </div>
+                    </div>
+                `;
+                
+                return; // Stop execution
+            }
+            
             if (userResult && userResult.user) {
                 // Use the phone from the database (Stripe's phone), not localStorage
                 const actualPhoneNumber = userResult.user.phone_number;
-                console.log("?? Using phone from database (not localStorage):", actualPhoneNumber);
+                console.log("✅ Using phone from database (not localStorage):", actualPhoneNumber);
 
                 // Trigger WhatsApp welcome message with correct phone
                 if (actualPhoneNumber && !actualPhoneNumber.startsWith('+1000')) {
                     const welcomeResult = await triggerWhatsAppWelcome(actualPhoneNumber, userData);
 
                     if (welcomeResult) {
-                        console.log("?? USER SETUP AND WHATSAPP WELCOME COMPLETE!");
+                        console.log("✅ USER SETUP AND WHATSAPP WELCOME COMPLETE!");
                     } else {
-                        console.log("?? User account created but WhatsApp welcome failed");
+                        console.log("⚠️ User account created but WhatsApp welcome failed");
                     }
                 } else {
-                    console.log("?? User created but no valid phone for WhatsApp");
+                    console.log("⚠️ User created but no valid phone for WhatsApp");
                 }
+                
+                // ============================================================================
+                // SECURITY: Mark setup as completed to prevent refresh exploit
+                // ============================================================================
+                const urlKey = window.location.search;
+                localStorage.setItem('setup_completed_' + urlKey, 'true');
+                console.log("🔒 Setup marked as completed - page refresh will be blocked");
+                console.log("ℹ️ This prevents users from creating duplicate accounts after cancellation");
+                // ============================================================================
+                
             } else {
-                console.log("? User setup failed - please contact support");
+                console.log("❌ User setup failed - please contact support");
+                
+                // Don't mark as completed if setup failed - allow retry on refresh
+                console.log("⚠️ Setup failed - user can refresh to retry");
             }
         }
 
@@ -4064,10 +4155,6 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 
-
-
-
-
 <!-- Insert HEADER script for Confirmation -->
 <script>
 const urlParams = new URLSearchParams(window.location.search);
@@ -4088,12 +4175,31 @@ n.queue=[];t=b.createElement(e);t.async=!0;
 t.src=v;s=b.getElementsByTagName(e)[0];
 s.parentNode.insertBefore(t,s)}(window, document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
+
+// Disable ALL automatic event tracking
+fbq('set', 'autoConfig', false, '1625548858408033');  
+  
 fbq('init', '1625548858408033');
 fbq('track', 'PageView');
 
 // StartTrial tracking on confirmation page (trial begins here)
-(function() {
+(async function() {
     console.log('🎯 Meta Pixel: StartTrial tracking initialized');
+    
+    // ============================================================================
+    // SECURITY: Prevent duplicate StartTrial events on page refresh
+    // ============================================================================
+    const urlKey = window.location.search; // Use URL params as unique identifier
+    const startTrialFired = localStorage.getItem('startTrial_fired_' + urlKey);
+    
+    if (startTrialFired === 'true') {
+        console.log('✅ StartTrial event already fired for this session');
+        console.log('🔒 Preventing duplicate event (refresh detected)');
+        return; // Exit immediately - DO NOT fire event again
+    }
+    
+    console.log('🆕 First time on confirmation page - firing StartTrial event');
+    // ============================================================================
     
     // Get the selected plan from localStorage (stored when button was clicked)
     const selectedPlan = localStorage.getItem('selectedPlan');
@@ -4122,7 +4228,7 @@ fbq('track', 'PageView');
     const plan = planDetails[selectedPlan] || planDetails.monthly;
     
     // Log what we're tracking
-    console.log('🔔 Tracking StartTrial Event:');
+    console.log('📢 Tracking StartTrial Event:');
     console.log('   - Plan:', plan.name);
     console.log('   - Predicted LTV: $' + plan.predicted_ltv);
     console.log('   - Currency: USD');
@@ -4139,6 +4245,13 @@ fbq('track', 'PageView');
     });
     
     console.log('✅ StartTrial event sent to Facebook');
+    
+    // ============================================================================
+    // MARK AS FIRED: Store flag to prevent duplicate events
+    // ============================================================================
+    localStorage.setItem('startTrial_fired_' + urlKey, 'true');
+    console.log('🔒 StartTrial event marked as fired for this session');
+    // ============================================================================
     
     // Remove the selectedPlan since we've used it
     localStorage.removeItem('selectedPlan');
@@ -4179,15 +4292,40 @@ fbq('track', 'PageView');
     console.log('📞 User phone:', userPhone);
     console.log('📧 User email:', userEmail);
     
+    // ============================================================================
+    // CAPTURE USER AGENT AND IP ADDRESS FOR META CONVERSIONS API
+    // ============================================================================
+    
+    // Get User Agent (browser/device information)
+    const userAgent = navigator.userAgent || '';
+    console.log('🖥️ User Agent captured:', userAgent.substring(0, 50) + '...');
+    
+    // Get IP Address using a public API
+    let userIpAddress = '';
+    try {
+        console.log('🌐 Fetching IP address...');
+        const ipResponse = await fetch('https://api.ipify.org?format=json');
+        const ipData = await ipResponse.json();
+        userIpAddress = ipData.ip || '';
+        console.log('✅ IP Address captured:', userIpAddress);
+    } catch (error) {
+        console.error('❌ Failed to fetch IP address:', error);
+        userIpAddress = ''; // Continue without IP if fetch fails
+    }
+    
     // Store Meta tracking data in localStorage to be included in user setup
     console.log('💾 Storing Meta tracking data in localStorage...');
     
     localStorage.setItem('meta_fbp', metaData.fbp || '');
     localStorage.setItem('meta_fbc', metaData.fbc || '');
+    localStorage.setItem('user_agent', userAgent);
+    localStorage.setItem('user_ip', userIpAddress);
     
     console.log('✅ Meta tracking data stored in localStorage:', {
         fbp: metaData.fbp || 'Not found',
         fbc: metaData.fbc || 'Not found',
+        user_agent: userAgent ? 'Captured' : 'Missing',
+        user_ip: userIpAddress || 'Not captured',
         plan: selectedPlan || 'monthly (default)'
     });
     
@@ -4198,7 +4336,6 @@ fbq('track', 'PageView');
 src="https://www.facebook.com/tr?id=1625548858408033&ev=PageView&noscript=1"
 /></noscript>
 <!-- End Meta Pixel Code -->
-
 
 <!-- Insert CSS FOOTER script for Confirmation -->
 .timeline-line {
@@ -4338,7 +4475,7 @@ src="https://www.facebook.com/tr?id=1625548858408033&ev=PageView&noscript=1"
   // Configuration
   const API_BASE = 'https://calorie-bot-2-production-73cb.up.railway.app';
   
-  // Field mapping: display label → database column
+  // Field mapping: display label â†’ database column
   const FIELD_MAP = {
     'First Name': 'first_name',
     'Last Name': 'last_name',
@@ -4423,7 +4560,7 @@ src="https://www.facebook.com/tr?id=1625548858408033&ev=PageView&noscript=1"
     const phoneFromUrl = urlParams.get('phone');
     
     if (phoneFromUrl) {
-      console.log('📱 Phone from URL:', phoneFromUrl);
+      console.log('ðŸ“± Phone from URL:', phoneFromUrl);
       return phoneFromUrl;
     }
     
@@ -4432,18 +4569,18 @@ src="https://www.facebook.com/tr?id=1625548858408033&ev=PageView&noscript=1"
   
   // Initialize dashboard
   function init() {
-    console.log('🚀 Dashboard initializing...');
+    console.log('ðŸš€ Dashboard initializing...');
     
     setTimeout(function() {
       const container = document.getElementById('iqc-dashboard');
       if (!container) {
-        console.error('❌ Dashboard container not found');
+        console.error('âŒ Dashboard container not found');
         const backupContainer = document.querySelector('.iqc-scope');
         if (backupContainer) {
           backupContainer.id = 'iqc-dashboard';
-          console.log('✅ Found backup container');
+          console.log('âœ… Found backup container');
         } else {
-          console.error('❌ No container found at all');
+          console.error('âŒ No container found at all');
           return;
         }
       }
@@ -4454,7 +4591,7 @@ src="https://www.facebook.com/tr?id=1625548858408033&ev=PageView&noscript=1"
         return;
       }
       
-      console.log('📱 Using phone:', currentUserPhone);
+      console.log('ðŸ“± Using phone:', currentUserPhone);
       loadUser();
     }, 1000);
   }
@@ -4465,8 +4602,8 @@ src="https://www.facebook.com/tr?id=1625548858408033&ev=PageView&noscript=1"
     container.innerHTML = '<div class="iqc-loading">Loading profile...</div>';
     
     try {
-      console.log('🔍 DEBUG: currentUserPhone variable =', currentUserPhone);
-      console.log('🔄 Fetching user data from:', API_BASE + '/api/user/' + encodeURIComponent(currentUserPhone));
+      console.log('ðŸ” DEBUG: currentUserPhone variable =', currentUserPhone);
+      console.log('ðŸ”„ Fetching user data from:', API_BASE + '/api/user/' + encodeURIComponent(currentUserPhone));
       
       const response = await fetch(API_BASE + '/api/user/' + encodeURIComponent(currentUserPhone), {
         method: 'GET',
@@ -4475,16 +4612,16 @@ src="https://www.facebook.com/tr?id=1625548858408033&ev=PageView&noscript=1"
         }
       });
       
-      console.log('📡 Response status:', response.status);
+      console.log('ðŸ“¡ Response status:', response.status);
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Response error:', errorText);
+        console.error('âŒ Response error:', errorText);
         throw new Error('Failed to load user data: ' + response.status);
       }
       
       const data = await response.json();
-      console.log('✅ User data received:', data);
+      console.log('âœ… User data received:', data);
       userData = data.user || {};
       
       renderDashboard();
@@ -4700,7 +4837,7 @@ src="https://www.facebook.com/tr?id=1625548858408033&ev=PageView&noscript=1"
     }
     
     try {
-      console.log('💾 Saving field:', fieldKey, '=', newValue);
+      console.log('ðŸ’¾ Saving field:', fieldKey, '=', newValue);
       
       const requestBody = {};
       requestBody[fieldKey] = newValue;
@@ -4713,16 +4850,16 @@ src="https://www.facebook.com/tr?id=1625548858408033&ev=PageView&noscript=1"
         body: JSON.stringify(requestBody)
       });
       
-      console.log('📡 Save response status:', response.status);
+      console.log('ðŸ“¡ Save response status:', response.status);
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Save error:', errorText);
+        console.error('âŒ Save error:', errorText);
         throw new Error('Update failed: ' + response.status);
       }
       
       const data = await response.json();
-      console.log('✅ Save successful:', data);
+      console.log('âœ… Save successful:', data);
       
       userData[fieldKey] = newValue;
 exitEdit(fieldKey);
@@ -4730,11 +4867,11 @@ toast('Profile updated successfully', 'success');
 
 // If diet preference was changed, re-render dashboard to show/hide custom diet preference field
 if (fieldKey === 'diet_preference') {
-  console.log('🔄 Diet preference changed, re-rendering dashboard...');
+  console.log('ðŸ”„ Diet preference changed, re-rendering dashboard...');
   
   // Clear custom diet preference if user switched away from "other"
   if (newValue !== 'other' && userData['diet_preference_custom']) {
-    console.log('🧹 Clearing custom diet preference since diet preference is no longer "other"');
+    console.log('ðŸ§¹ Clearing custom diet preference since diet preference is no longer "other"');
     
     // Clear it in the database
     fetch(API_BASE + '/api/user/' + encodeURIComponent(currentUserPhone), {
@@ -4747,11 +4884,11 @@ if (fieldKey === 'diet_preference') {
       })
     }).then(function(response) {
       if (response.ok) {
-        console.log('✅ Custom diet preference cleared in database');
+        console.log('âœ… Custom diet preference cleared in database');
         userData['diet_preference_custom'] = null;
       }
     }).catch(function(error) {
-      console.error('❌ Failed to clear custom diet preference:', error);
+      console.error('âŒ Failed to clear custom diet preference:', error);
     });
   }
   
@@ -4817,7 +4954,7 @@ if (fieldKey === 'diet_preference') {
     errorDiv.style.display = 'none';
     
     try {
-      console.log('🔗 Requesting billing portal for:', currentUserPhone);
+      console.log('ðŸ”— Requesting billing portal for:', currentUserPhone);
       
       const response = await fetch(API_BASE + '/api/billing-portal', {
         method: 'POST',
@@ -4832,7 +4969,7 @@ if (fieldKey === 'diet_preference') {
       const data = await response.json();
       
       if (data.success && data.url) {
-        console.log('✅ Billing portal URL received');
+        console.log('âœ… Billing portal URL received');
         // Open billing portal in new tab
         window.open(data.url, '_blank');
       } else {
@@ -4840,7 +4977,7 @@ if (fieldKey === 'diet_preference') {
       }
       
     } catch (error) {
-      console.error('❌ Billing portal error:', error);
+      console.error('âŒ Billing portal error:', error);
       let errorMessage = 'Unable to access billing portal. Please try again.';
       
       if (error.message && error.message.includes('not set up')) {
@@ -5085,7 +5222,4 @@ if (fieldKey === 'diet_preference') {
   margin-top: 10px;
   font-size: 14px;
 }
-
-
-
 

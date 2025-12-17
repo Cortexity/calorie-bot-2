@@ -3153,6 +3153,9 @@ app.post('/create-checkout-session', async (req, res) => {
       success_url: `https://www.iqcalorie.com/confirmation?session_id={CHECKOUT_SESSION_ID}&checkout_key=${checkoutKey}`,
       cancel_url: 'https://www.iqcalorie.com/choose-your-plan',
       
+      // Enable promo code field on Stripe checkout page
+      allow_promotion_codes: true,
+      
       // COLLECT PHONE (required)
       phone_number_collection: {
         enabled: true
