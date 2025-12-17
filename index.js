@@ -3433,8 +3433,18 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
       
       console.log('✅ Checkout session completed');
       console.log('📋 Session ID:', session.id);
-      console.log('💤 Customer ID:', session.customer);
+      console.log('👤 Customer ID:', session.customer);
       console.log('💳 Subscription ID:', session.subscription);
+      
+      // Check if a discount/coupon was used
+      const discount = session.total_details?.amount_discount || 0;
+      const couponUsed = discount > 0;
+      let couponCode = null;
+      
+      if (couponUsed && session.discount) {
+        couponCode = session.discount.coupon?.id || null;
+        console.log('🎟️ Coupon used:', couponCode, '- Discount amount:', discount / 100);
+      }
       
       const successUrl = session.success_url || '';
       const checkoutKeyMatch = successUrl.match(/checkout_key=([^&]+)/);
@@ -3452,10 +3462,31 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
           currency: session.currency,
           checkout_key: checkoutKey,
           payment_status: session.payment_status,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          // NEW: Track coupon usage
+          coupon_used: couponUsed,
+          coupon_code: couponCode,
+          discount_amount: discount
         };
         
         console.log('🎯 STRIPE USER DATA READY FOR SUPABASE:', stripeUserData);
+        
+        // If coupon was used, add metadata to subscription for easy tracking
+        if (couponUsed && session.subscription && couponCode) {
+          try {
+            console.log('🏷️ Adding coupon metadata to subscription...');
+            await stripe.subscriptions.update(session.subscription, {
+              metadata: {
+                promo_code_used: couponCode,
+                is_content_creator: couponCode.includes('100') ? 'true' : 'false',
+                discount_applied: `${discount / 100} ${session.currency.toUpperCase()}`
+              }
+            });
+            console.log('✅ Subscription metadata updated with coupon info');
+          } catch (metaError) {
+            console.error('❌ Error adding metadata to subscription:', metaError);
+          }
+        }
       }
     }
     
