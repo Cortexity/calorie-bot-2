@@ -3442,7 +3442,7 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
       
       console.log('🔑 Extracted checkout key:', checkoutKey);
       
-      // Check if coupon was used - MUST check subscription object
+      // Check if coupon was used - Check BOTH subscription AND latest invoice
       let couponCode = null;
       let couponUsed = false;
       let discountAmount = 0;
@@ -3451,36 +3451,50 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
         try {
           console.log('🔍 Checking subscription for coupon...');
           
-          // Retrieve the subscription with expanded discount object
+          // Retrieve the subscription with expanded discount and latest invoice
           const subscription = await stripe.subscriptions.retrieve(session.subscription, {
-            expand: ['discount.coupon']
+            expand: ['discount.coupon', 'latest_invoice.discounts']
           });
           
           console.log('📊 Subscription retrieved:', subscription.id);
-          console.log('🔍 Checking discount object:', subscription.discount ? 'Present' : 'Not present');
+          console.log('🔍 Checking subscription discount:', subscription.discount ? 'Present' : 'Not present');
           
-          // Check if subscription has a discount applied
+          // First check: subscription-level discount (for "forever" or "repeating" coupons)
           if (subscription.discount && subscription.discount.coupon) {
             couponCode = subscription.discount.coupon.id;
             couponUsed = true;
             
-            // Calculate discount amount based on coupon type
-            if (subscription.discount.coupon.percent_off) {
-              const percentOff = subscription.discount.coupon.percent_off;
-              console.log('🎟️ COUPON DETECTED:', couponCode);
-              console.log('💰 Discount:', percentOff + '% off');
-              console.log('📅 Duration:', subscription.discount.coupon.duration);
-            } else if (subscription.discount.coupon.amount_off) {
-              const amountOff = subscription.discount.coupon.amount_off;
-              discountAmount = amountOff;
-              console.log('🎟️ COUPON DETECTED:', couponCode);
-              console.log('💰 Discount: $' + (amountOff / 100));
+            const percentOff = subscription.discount.coupon.percent_off || 0;
+            const amountOff = subscription.discount.coupon.amount_off || 0;
+            
+            console.log('🎟️ COUPON DETECTED (Subscription Level):', couponCode);
+            console.log('💰 Discount:', percentOff ? `${percentOff}% off` : `$${amountOff / 100} off`);
+            console.log('📅 Duration:', subscription.discount.coupon.duration);
+          } 
+          // Second check: invoice-level discount (for "once" coupons)
+          else if (subscription.latest_invoice && subscription.latest_invoice.discounts && subscription.latest_invoice.discounts.length > 0) {
+            console.log('🔍 Checking latest invoice for discounts...');
+            
+            // Get the first discount from the invoice
+            const invoiceDiscount = subscription.latest_invoice.discounts[0];
+            
+            if (invoiceDiscount && invoiceDiscount.coupon) {
+              couponCode = invoiceDiscount.coupon.id;
+              couponUsed = true;
+              
+              const percentOff = invoiceDiscount.coupon.percent_off || 0;
+              const amountOff = invoiceDiscount.coupon.amount_off || 0;
+              
+              console.log('🎟️ COUPON DETECTED (Invoice Level):', couponCode);
+              console.log('💰 Discount:', percentOff ? `${percentOff}% off` : `$${amountOff / 100} off`);
+              console.log('📅 Duration:', invoiceDiscount.coupon.duration);
+              console.log('ℹ️ This is a "once" coupon - applied to first invoice only');
             }
           } else {
-            console.log('ℹ️ No coupon applied to subscription');
+            console.log('ℹ️ No coupon found on subscription or invoice');
           }
         } catch (couponError) {
-          console.error('⚠️ Error checking subscription for coupon:', couponError.message);
+          console.error('⚠️ Error checking for coupon:', couponError.message);
           console.error('⚠️ Full error:', couponError);
         }
       } else {
