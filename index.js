@@ -3215,14 +3215,38 @@ async function handleSubscriptionCancellation(subscription) {
   console.log('🗑️ Processing subscription cancellation:', subscription.id);
   
   try {
-    // Find user by Stripe subscription ID
-    const { data: users, error: findError } = await db
-      .from('users')
-      .select('*')
-      .eq('stripe_subscription_id', subscription.id);
+    // RETRY LOGIC: User creation might take a few seconds (same pattern as charge.succeeded)
+    let users = null;
+    let findError = null;
+    let attempts = 0;
+    const maxAttempts = 5;
+    
+    while (attempts < maxAttempts && (!users || users.length === 0)) {
+      attempts++;
+      
+      // Wait before each attempt (3s, 5s, 7s, 9s, 11s) - SAME AS charge.succeeded
+      const waitTime = 1000 + (attempts * 2000);
+      console.log(`⏳ Attempt ${attempts}/${maxAttempts}: Waiting ${waitTime/1000}s for user creation...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      
+      // Find user by Stripe subscription ID
+      const result = await db
+        .from('users')
+        .select('*')
+        .eq('stripe_subscription_id', subscription.id);
+      
+      users = result.data;
+      findError = result.error;
+      
+      if (users && users.length > 0) {
+        console.log(`✅ User found on attempt ${attempts}`);
+        break;
+      }
+    }
     
     if (findError || !users || users.length === 0) {
-      console.error('❌ User not found for cancelled subscription:', subscription.id);
+      console.log('❌ User not found for cancelled subscription after', maxAttempts, 'attempts:', subscription.id);
+      console.log('ℹ️  This might be a duplicate signup that was prevented, or user was never created');
       return;
     }
     
