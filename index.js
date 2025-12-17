@@ -3442,35 +3442,49 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
       
       console.log('🔑 Extracted checkout key:', checkoutKey);
       
-      // Check if coupon was used by retrieving full session details
+      // Check if coupon was used - MUST check subscription object
       let couponCode = null;
       let couponUsed = false;
       let discountAmount = 0;
       
-      try {
-        console.log('🔍 Retrieving full session to check for coupons...');
-        const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
-          expand: ['total_details.breakdown']
-        });
-        
-        // Check if session has discounts applied
-        if (fullSession.total_details && fullSession.total_details.amount_discount > 0) {
-          discountAmount = fullSession.total_details.amount_discount;
-          couponUsed = true;
+      if (session.subscription) {
+        try {
+          console.log('🔍 Checking subscription for coupon...');
           
-          // Get the subscription to find the coupon code
-          if (fullSession.subscription) {
-            const subscription = await stripe.subscriptions.retrieve(fullSession.subscription);
-            if (subscription.discount && subscription.discount.coupon) {
-              couponCode = subscription.discount.coupon.id;
-              console.log('🎟️ Coupon detected:', couponCode, '- Discount:', discountAmount / 100, fullSession.currency.toUpperCase());
+          // Retrieve the subscription with expanded discount object
+          const subscription = await stripe.subscriptions.retrieve(session.subscription, {
+            expand: ['discount.coupon']
+          });
+          
+          console.log('📊 Subscription retrieved:', subscription.id);
+          console.log('🔍 Checking discount object:', subscription.discount ? 'Present' : 'Not present');
+          
+          // Check if subscription has a discount applied
+          if (subscription.discount && subscription.discount.coupon) {
+            couponCode = subscription.discount.coupon.id;
+            couponUsed = true;
+            
+            // Calculate discount amount based on coupon type
+            if (subscription.discount.coupon.percent_off) {
+              const percentOff = subscription.discount.coupon.percent_off;
+              console.log('🎟️ COUPON DETECTED:', couponCode);
+              console.log('💰 Discount:', percentOff + '% off');
+              console.log('📅 Duration:', subscription.discount.coupon.duration);
+            } else if (subscription.discount.coupon.amount_off) {
+              const amountOff = subscription.discount.coupon.amount_off;
+              discountAmount = amountOff;
+              console.log('🎟️ COUPON DETECTED:', couponCode);
+              console.log('💰 Discount: $' + (amountOff / 100));
             }
+          } else {
+            console.log('ℹ️ No coupon applied to subscription');
           }
-        } else {
-          console.log('ℹ️ No coupon used in this checkout');
+        } catch (couponError) {
+          console.error('⚠️ Error checking subscription for coupon:', couponError.message);
+          console.error('⚠️ Full error:', couponError);
         }
-      } catch (couponError) {
-        console.error('⚠️ Error checking for coupon:', couponError.message);
+      } else {
+        console.log('ℹ️ No subscription in this session (might be one-time payment)');
       }
       
       if (checkoutKey) {
