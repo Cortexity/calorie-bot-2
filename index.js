@@ -3479,8 +3479,34 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
             const invoiceDiscount = subscription.latest_invoice.discounts[0];
             
             if (invoiceDiscount && invoiceDiscount.coupon) {
-              // Get the coupon ID - this should be MO100 or YR100
-              couponCode = invoiceDiscount.coupon.id;
+              // First, try to get the promotion code that was entered by the user
+              if (invoiceDiscount.promotion_code) {
+                try {
+                  console.log('🔍 Found promotion code ID:', invoiceDiscount.promotion_code);
+                  
+                  // Retrieve the promotion code object to get the actual code (e.g., "MO100")
+                  const promoCodeObj = await stripe.promotionCodes.retrieve(invoiceDiscount.promotion_code);
+                  
+                  if (promoCodeObj && promoCodeObj.code) {
+                    // This is the actual code the user entered (MO100, YR100, etc.)
+                    couponCode = promoCodeObj.code;
+                    console.log('✅ Retrieved promotion code:', couponCode);
+                  } else {
+                    // Fallback to coupon ID if promotion code doesn't have a code
+                    couponCode = invoiceDiscount.coupon.id;
+                    console.log('⚠️ No code found on promotion, using coupon ID:', couponCode);
+                  }
+                } catch (promoError) {
+                  console.error('⚠️ Error retrieving promotion code:', promoError.message);
+                  // Fallback to coupon ID
+                  couponCode = invoiceDiscount.coupon.id;
+                }
+              } else {
+                // No promotion code used, just get the coupon ID
+                couponCode = invoiceDiscount.coupon.id;
+                console.log('ℹ️ No promotion code, using coupon ID:', couponCode);
+              }
+              
               couponUsed = true;
               
               const percentOff = invoiceDiscount.coupon.percent_off || 0;
@@ -3490,9 +3516,6 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
               console.log('💰 Discount:', percentOff ? `${percentOff}% off` : `$${amountOff / 100} off`);
               console.log('📅 Duration:', invoiceDiscount.coupon.duration);
               console.log('ℹ️ This is a "once" coupon - applied to first invoice only');
-              
-              // DEBUG: Log the entire discount object to see what's available
-              console.log('🔍 DEBUG - Full discount object:', JSON.stringify(invoiceDiscount, null, 2));
             }
           } else {
             console.log('ℹ️ No coupon found on subscription or invoice');
