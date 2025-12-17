@@ -3436,21 +3436,42 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
       console.log('👤 Customer ID:', session.customer);
       console.log('💳 Subscription ID:', session.subscription);
       
-      // Check if a discount/coupon was used
-      const discount = session.total_details?.amount_discount || 0;
-      const couponUsed = discount > 0;
-      let couponCode = null;
-      
-      if (couponUsed && session.discount) {
-        couponCode = session.discount.coupon?.id || null;
-        console.log('🎟️ Coupon used:', couponCode, '- Discount amount:', discount / 100);
-      }
-      
       const successUrl = session.success_url || '';
       const checkoutKeyMatch = successUrl.match(/checkout_key=([^&]+)/);
       const checkoutKey = checkoutKeyMatch ? checkoutKeyMatch[1] : null;
       
       console.log('🔑 Extracted checkout key:', checkoutKey);
+      
+      // Check if coupon was used by retrieving full session details
+      let couponCode = null;
+      let couponUsed = false;
+      let discountAmount = 0;
+      
+      try {
+        console.log('🔍 Retrieving full session to check for coupons...');
+        const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
+          expand: ['total_details.breakdown']
+        });
+        
+        // Check if session has discounts applied
+        if (fullSession.total_details && fullSession.total_details.amount_discount > 0) {
+          discountAmount = fullSession.total_details.amount_discount;
+          couponUsed = true;
+          
+          // Get the subscription to find the coupon code
+          if (fullSession.subscription) {
+            const subscription = await stripe.subscriptions.retrieve(fullSession.subscription);
+            if (subscription.discount && subscription.discount.coupon) {
+              couponCode = subscription.discount.coupon.id;
+              console.log('🎟️ Coupon detected:', couponCode, '- Discount:', discountAmount / 100, fullSession.currency.toUpperCase());
+            }
+          }
+        } else {
+          console.log('ℹ️ No coupon used in this checkout');
+        }
+      } catch (couponError) {
+        console.error('⚠️ Error checking for coupon:', couponError.message);
+      }
       
       if (checkoutKey) {
         const stripeUserData = {
@@ -3463,28 +3484,35 @@ app.post('/stripe-webhook', express.raw({ type: 'application/json' }), async (re
           checkout_key: checkoutKey,
           payment_status: session.payment_status,
           created_at: new Date().toISOString(),
-          // NEW: Track coupon usage
           coupon_used: couponUsed,
           coupon_code: couponCode,
-          discount_amount: discount
+          discount_amount: discountAmount
         };
         
         console.log('🎯 STRIPE USER DATA READY FOR SUPABASE:', stripeUserData);
         
-        // If coupon was used, add metadata to subscription for easy tracking
-        if (couponUsed && session.subscription && couponCode) {
+        // If coupon was used, update customer description to show it prominently
+        if (couponUsed && couponCode && session.customer) {
           try {
-            console.log('🏷️ Adding coupon metadata to subscription...');
-            await stripe.subscriptions.update(session.subscription, {
-              metadata: {
-                promo_code_used: couponCode,
-                is_content_creator: couponCode.includes('100') ? 'true' : 'false',
-                discount_applied: `${discount / 100} ${session.currency.toUpperCase()}`
-              }
+            console.log('📝 Updating customer description with coupon info...');
+            
+            // Get current customer to preserve any existing description
+            const customer = await stripe.customers.retrieve(session.customer);
+            const existingDescription = customer.description || '';
+            
+            // Create new description with coupon badge
+            const couponBadge = `🎟️ PROMO: ${couponCode}`;
+            const newDescription = existingDescription 
+              ? `${couponBadge} | ${existingDescription}` 
+              : couponBadge;
+            
+            await stripe.customers.update(session.customer, {
+              description: newDescription
             });
-            console.log('✅ Subscription metadata updated with coupon info');
-          } catch (metaError) {
-            console.error('❌ Error adding metadata to subscription:', metaError);
+            
+            console.log('✅ Customer description updated:', newDescription);
+          } catch (descError) {
+            console.error('❌ Error updating customer description:', descError);
           }
         }
       }
