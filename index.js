@@ -2505,19 +2505,25 @@ app.post('/complete-user-setup', async (req, res) => {
           continue;
         }
         
-        // Check if this customer has any active subscriptions
+        // Check if this customer has any active OR trialing subscriptions
         try {
           const subscriptions = await stripe.subscriptions.list({
             customer: customer.id,
-            status: 'active',
-            limit: 1
+            status: 'all', // Check ALL statuses including trialing, active, past_due
+            limit: 10
           });
           
-          if (subscriptions.data.length > 0) {
-            console.log('   ⚠️  Found ACTIVE duplicate customer:', customer.id);
+          // Filter for active statuses (trialing, active, past_due)
+          const activeOrTrialing = subscriptions.data.filter(sub => 
+            ['trialing', 'active', 'past_due'].includes(sub.status)
+          );
+          
+          if (activeOrTrialing.length > 0) {
+            console.log('   ⚠️  Found duplicate customer with active/trialing subscription:', customer.id);
+            console.log('   📋 Subscription status:', activeOrTrialing[0].status);
             activeDuplicates.push(customer);
           } else {
-            console.log('   ℹ️  Ignoring inactive customer:', customer.id);
+            console.log('   ℹ️  Ignoring customer with no active subscriptions:', customer.id);
           }
         } catch (subError) {
           console.log('   ℹ️  Could not check subscriptions for:', customer.id);
